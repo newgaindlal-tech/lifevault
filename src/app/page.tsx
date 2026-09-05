@@ -85,11 +85,10 @@ function MainVaultDashboard() {
       setViewingItem(updated);
     }
     await generateDueReminders();
-    // घंटी को तुरंत ताज़ा करने का सिग्नल भेजें
     window.dispatchEvent(new Event('vault-items-updated'));
   };
 
-// Handle Delete
+  // Handle Delete
   const handleDeleteItem = async (id: string) => {
     await deleteVaultItem(id);
     setItems((prev) => prev.filter((it) => it.id !== id));
@@ -293,7 +292,11 @@ function MainVaultDashboard() {
             ({processedItems.length})
           </h3>
           <span className="text-xs text-slate-500">
-            {currentSort === 'urgent' ? 'Sorted by nearest deadline' : currentSort === 'recent' ? 'Sorted by newest' : 'Sorted alphabetically'}
+            {currentSort === 'urgent'
+              ? 'Sorted by nearest deadline'
+              : currentSort === 'recent'
+              ? 'Sorted by newest'
+              : 'Sorted alphabetically'}
           </span>
         </div>
 
@@ -389,7 +392,7 @@ function MainVaultDashboard() {
         )}
       </div>
 
-      {/* Recently Added Drawer / Section (Visible if items exist) */}
+      {/* Recently Added Drawer */}
       {recentlyAdded.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-700">

@@ -11,11 +11,6 @@ export const NotificationCenter: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const loadReminders = useCallback(async () => {
-    const data = await fetchUserReminders();
-    setNotifications(data);
-  }, []);
-
   const handleManualScan = useCallback(async () => {
     setIsRefreshing(true);
     try {
