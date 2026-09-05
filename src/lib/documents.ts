@@ -18,26 +18,25 @@ const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
 ]);
 
-const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB ceiling
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export async function uploadDocument(
   itemId: string,
   file: File
 ): Promise<DocumentRecord> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) throw new Error('Unauthenticated');
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.user) {
+    throw new Error('You must be logged in to upload attachments.');
+  }
 
-  // 1. File Size Validation
   if (file.size > MAX_FILE_SIZE_BYTES) {
     throw new Error('File exceeds maximum allowable size of 5 MB.');
   }
 
-  // 2. MIME Type Validation
   if (!ALLOWED_MIME_TYPES.has(file.type)) {
     throw new Error('Unsupported file type. Only JPEG, PNG, WebP, and PDF are allowed.');
   }
 
-  // 3. Isolated, sanitized storage path
   const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const filePath = `${session.user.id}/${itemId}/${Date.now()}_${sanitizedName}`;
 
@@ -49,11 +48,10 @@ export async function uploadDocument(
     });
 
   if (uploadError) {
-    console.error('Storage upload error:', uploadError);
+    console.error('Storage upload error:', uploadError.message || uploadError);
     throw new Error(`Upload failed: ${uploadError.message}`);
   }
 
-  // 4. Save metadata record
   const { data, error: dbError } = await supabase
     .from('documents')
     .insert([
@@ -70,8 +68,8 @@ export async function uploadDocument(
     .single();
 
   if (dbError) {
-    // Rollback file from storage if DB record insertion fails
     await supabase.storage.from('vault_documents').remove([filePath]);
+    console.error('DB record error:', dbError.message || dbError);
     throw new Error(`Database error: ${dbError.message}`);
   }
 
@@ -79,8 +77,12 @@ export async function uploadDocument(
 }
 
 export async function fetchItemDocuments(itemId: string): Promise<DocumentRecord[]> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user) return [];
+  if (!itemId) return [];
+
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.user) {
+    return [];
+  }
 
   const { data, error } = await supabase
     .from('documents')
@@ -90,7 +92,7 @@ export async function fetchItemDocuments(itemId: string): Promise<DocumentRecord
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching documents:', error);
+    console.error('Error fetching documents:', error.message || error.details || JSON.stringify(error));
     return [];
   }
 
@@ -100,25 +102,23 @@ export async function fetchItemDocuments(itemId: string): Promise<DocumentRecord
 export async function getDocumentSignedUrl(filePath: string): Promise<string> {
   const { data, error } = await supabase.storage
     .from('vault_documents')
-    .createSignedUrl(filePath, 300); // 5-minute expiry token
+    .createSignedUrl(filePath, 300);
 
   if (error || !data?.signedUrl) {
-    throw new Error('Unable to generate secure download link');
+    throw new Error('Unable to generate secure link');
   }
 
   return data.signedUrl;
 }
 
 export async function deleteDocument(doc: DocumentRecord): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session?.user || session.user.id !== doc.user_id) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  if (sessionError || !session?.user || session.user.id !== doc.user_id) {
     throw new Error('Unauthorized');
   }
 
-  // Delete storage object first
   await supabase.storage.from('vault_documents').remove([doc.file_path]);
 
-  // Delete DB metadata record
   const { error } = await supabase
     .from('documents')
     .delete()
