@@ -1,64 +1,60 @@
 'use client';
 
 import React from 'react';
-import { Home, PlusCircle, Calendar, Settings } from 'lucide-react';
+import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
+import { Shield, LogOut, User as UserIcon } from 'lucide-react';
 
-interface NavigationProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-}
-
-export const Navigation: React.FC<NavigationProps> = ({ activeTab, setActiveTab }) => {
-  const navItems = [
-    { id: 'dashboard', label: 'Vault', icon: Home },
-    { id: 'add', label: 'Add Item', icon: PlusCircle },
-    { id: 'calendar', label: 'Timeline', icon: Calendar },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
+export const Navigation: React.FC = () => {
+  const { user, signOut } = useAuth();
 
   return (
-    <>
-      {/* Desktop Top Navigation Links */}
-      <nav className="hidden md:flex items-center gap-1 border-b border-slate-200 bg-white px-8 py-2">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-semibold transition-colors ${
-                isActive
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur-md">
+      <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-4 sm:px-6">
+        {/* Brand Logo */}
+        <Link href="/" className="flex items-center gap-2.5 font-black text-slate-900 tracking-tight">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+            <Shield className="h-5 w-5" />
+          </div>
+          <span className="text-base sm:text-lg">LifeVault</span>
+        </Link>
 
-      {/* Mobile Bottom Navigation Bar (Fixed for mobile thumb ergonomics) */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 flex h-16 items-center justify-around border-t border-slate-200 bg-white px-2 shadow-lg">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
+        {/* User Navigation & Notification Area */}
+        {user ? (
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="hidden sm:flex items-center gap-2 rounded-lg bg-slate-50 border border-slate-200 px-2.5 py-1 text-xs text-slate-700">
+              <UserIcon className="h-3.5 w-3.5 text-slate-400" />
+              <span className="max-w-35 truncate font-medium">
+                {user.user_metadata?.full_name || user.email}
+              </span>
+            </div>
+
             <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex flex-col items-center justify-center w-16 py-1 text-[10px] font-medium transition-colors ${
-                isActive ? 'text-emerald-600' : 'text-slate-500 hover:text-slate-800'
-              }`}
+              onClick={() => signOut()}
+              title="Sign Out"
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-colors"
             >
-              <Icon className="h-5 w-5 mb-0.5" />
-              {item.label}
+              <LogOut className="h-4 w-4" />
+              <span className="hidden sm:inline">Logout</span>
             </button>
-          );
-        })}
-      </nav>
-    </>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <Link
+              href="/login"
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/signup"
+              className="rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors shadow-xs"
+            >
+              Sign Up
+            </Link>
+          </div>
+        )}
+      </div>
+    </header>
   );
 };

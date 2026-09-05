@@ -3,10 +3,9 @@
 import React from 'react';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
 import { ProcessedItem } from '@/lib/filterEngine';
 import { ITEM_CATEGORIES } from '@/types';
-import { Calendar, MapPin, Tag } from 'lucide-react';
+import { Calendar, MapPin, Tag, ChevronRight } from 'lucide-react';
 
 interface ItemCardProps {
   processed: ProcessedItem;
@@ -20,58 +19,53 @@ export const ItemCard: React.FC<ItemCardProps> = ({ processed, onView }) => {
   return (
     <Card
       onClick={onView}
-      className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 cursor-pointer hover:border-slate-300 hover:shadow-xs transition-all select-none"
+      className="p-3.5 sm:p-4 cursor-pointer active:bg-slate-50 sm:hover:border-slate-300 sm:hover:shadow-xs transition-all touch-manipulation select-none"
     >
-      <div className="space-y-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-bold text-slate-900 truncate max-w-70">
-            {item.name}
-          </span>
-          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded capitalize">
-            {catMeta?.label || item.category}
-          </span>
-          <Badge status={meta.status} />
-        </div>
-
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3.5 w-3.5 text-slate-400" />
-            <span>{meta.dateLabel}:</span>
-            <strong className="text-slate-800">{meta.targetDate || 'None'}</strong>
-          </span>
-
-          {item.brand && (
-            <span>
-              Brand: <strong className="text-slate-700">{item.brand}</strong>
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-1 min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-sm font-bold text-slate-900 truncate max-w-55 sm:max-w-85">
+              {item.name}
             </span>
-          )}
+            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded capitalize">
+              {catMeta?.label || item.category}
+            </span>
+            <Badge status={meta.status} />
+          </div>
 
-          {item.location_tag && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 pt-0.5">
             <span className="flex items-center gap-1">
-              <MapPin className="h-3.5 w-3.5 text-slate-400" />
-              <span>{item.location_tag}</span>
+              <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span>{meta.dateLabel}:</span>
+              <strong className="text-slate-800 font-semibold">{meta.targetDate || 'None'}</strong>
             </span>
-          )}
 
-          {item.policy_number && (
-            <span className="flex items-center gap-1 font-mono">
-              <Tag className="h-3.5 w-3.5 text-slate-400" />
-              <span>{item.policy_number}</span>
-            </span>
-          )}
+            {item.brand && (
+              <span>
+                Brand: <strong className="text-slate-700">{item.brand}</strong>
+              </span>
+            )}
 
-          {item.batch_number && (
-            <span className="font-mono text-[11px] text-slate-400">
-              Lot: {item.batch_number}
-            </span>
-          )}
+            {item.location_tag && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span>{item.location_tag}</span>
+              </span>
+            )}
+
+            {item.policy_number && (
+              <span className="flex items-center gap-1 font-mono">
+                <Tag className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span>{item.policy_number}</span>
+              </span>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="flex items-center justify-between md:justify-end gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 shrink-0">
-        <div className="text-right">
+        {/* Right side urgency status and mobile chevron */}
+        <div className="flex flex-col items-end justify-between shrink-0 pl-1 gap-2">
           <span
-            className={`text-xs font-bold block ${
+            className={`text-xs font-bold ${
               meta.status === 'expired'
                 ? 'text-rose-600'
                 : meta.status === 'expiring'
@@ -81,17 +75,8 @@ export const ItemCard: React.FC<ItemCardProps> = ({ processed, onView }) => {
           >
             {meta.urgencyText}
           </span>
+          <ChevronRight className="h-4 w-4 text-slate-400" />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            onView();
-          }}
-        >
-          View
-        </Button>
       </div>
     </Card>
   );

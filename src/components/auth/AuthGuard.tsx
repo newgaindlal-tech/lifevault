@@ -10,16 +10,16 @@ interface AuthGuardProps {
 }
 
 export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
-  const { user, isLoading } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (!loading && !user) {
       router.replace('/auth/login');
     }
-  }, [user, isLoading, router]);
+  }, [user, loading, router]);
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="max-w-md mx-auto mt-12 p-6 space-y-4">
         <div className="text-center text-xs font-semibold text-slate-500 animate-pulse">

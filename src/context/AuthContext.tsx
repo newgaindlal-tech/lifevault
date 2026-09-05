@@ -7,49 +7,43 @@ import { supabase } from '@/lib/supabase';
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  isLoading: boolean;
+  loading: boolean;
   signOut: () => Promise<void>;
 }
 
-// सुरक्षित डिफ़ॉल्ट वैल्यू ताकि ऐप कभी क्रैश न हो
-const defaultAuthValue: AuthContextType = {
+const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
-  isLoading: true,
+  loading: true,
   signOut: async () => {},
-};
-
-const AuthContext = createContext<AuthContextType>(defaultAuthValue);
+});
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. एक्टिव सेशन चेक करें
-    const initializeAuth = async () => {
-      try {
-        const { data: { session: activeSession } } = await supabase.auth.getSession();
-        setSession(activeSession);
-        setUser(activeSession?.user ?? null);
-      } catch (error) {
-        console.error('Error fetching session:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    // 1. Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
 
-    initializeAuth();
+    // 2. Listen for auth changes and wipe state on switch
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
+      setLoading(false);
 
-    // 2. ऑथ स्टेट बदलाव सुनें (login / logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, updatedSession) => {
-        setSession(updatedSession);
-        setUser(updatedSession?.user ?? null);
-        setIsLoading(false);
+      if (event === 'SIGNED_OUT') {
+        // Broadcast event to clear cached memory stores
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('vault-user-signed-out'));
+        }
       }
-    );
+    });
 
     return () => {
       subscription.unsubscribe();
@@ -57,27 +51,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signOut = async () => {
-    setIsLoading(true);
     try {
       await supabase.auth.signOut();
-      setUser(null);
-      setSession(null);
     } catch (err) {
-      console.error('Error signing out:', err);
+      console.error('Error during signOut:', err);
     } finally {
-      setIsLoading(false);
+      setSession(null);
+      setUser(null);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Safe Hook: यह एरर फेंकने के बजाय हमेशा वैध वैल्यू लौटाएगा
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  return context || defaultAuthValue;
-};
+export const useAuth = () => useContext(AuthContext);

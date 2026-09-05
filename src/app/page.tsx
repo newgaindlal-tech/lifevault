@@ -58,7 +58,6 @@ function MainVaultDashboard() {
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [viewingItem, setViewingItem] = useState<VaultItem | null>(null);
 
-  // 1. Fetch User Items
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -77,9 +76,17 @@ function MainVaultDashboard() {
       await loadData();
     };
     void runLoad();
+
+    const handleItemSync = () => void loadData();
+    window.addEventListener('vault-items-updated', handleItemSync);
+    window.addEventListener('vault-user-signed-out', () => setItems([]));
+
+    return () => {
+      window.removeEventListener('vault-items-updated', handleItemSync);
+      window.removeEventListener('vault-user-signed-out', () => setItems([]));
+    };
   }, [loadData]);
 
-  // 2. Add / Edit Handler
   const handleFormSubmit = async (payload: ItemPayload) => {
     if (formModalMode === 'add') {
       const created = await createVaultItem(payload);
@@ -93,14 +100,12 @@ function MainVaultDashboard() {
     window.dispatchEvent(new Event('vault-items-updated'));
   };
 
-  // 3. Delete Handler
   const handleDeleteItem = async (id: string) => {
     await deleteVaultItem(id);
     setItems((prev) => prev.filter((it) => it.id !== id));
     window.dispatchEvent(new Event('vault-items-updated'));
   };
 
-  // 4. Metrics calculation across total collection
   const metrics = useMemo(() => {
     let expiredCount = 0;
     let expiringSoonCount = 0;
@@ -131,7 +136,6 @@ function MainVaultDashboard() {
     };
   }, [items]);
 
-  // 5. Run Filter and Sort Engine
   const processedItems = useMemo(() => {
     return filterAndSortItems(items, {
       searchQuery,
@@ -141,7 +145,6 @@ function MainVaultDashboard() {
     });
   }, [items, searchQuery, statusFilter, categoryFilter, sortBy]);
 
-  // 6. Group items for structured display
   const itemGroups = useMemo(() => {
     return groupItems(processedItems, groupMode);
   }, [processedItems, groupMode]);
@@ -156,19 +159,19 @@ function MainVaultDashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+    <div className="space-y-4 sm:space-y-6 pb-20 sm:pb-8">
+      {/* Top Banner (Touch Friendly) */}
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 sm:p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
             <ShieldCheck className="h-5 w-5" />
           </div>
-          <div>
-            <h2 className="text-sm font-bold text-slate-900">
-              Welcome back, {user?.user_metadata?.full_name || user?.email}
+          <div className="min-w-0">
+            <h2 className="text-sm font-bold text-slate-900 truncate">
+              {user?.user_metadata?.full_name || user?.email}
             </h2>
             <p className="text-xs text-slate-600">
-              Surveillance active on <strong className="text-slate-800">{items.length} records</strong>.
+              <strong className="text-slate-800">{items.length} records</strong> tracked
             </p>
           </div>
         </div>
@@ -181,64 +184,74 @@ function MainVaultDashboard() {
             setFormModalMode('add');
             setFormModalOpen(true);
           }}
-          className="gap-2 w-full sm:w-auto"
+          className="w-full sm:w-auto h-11 sm:h-9 text-sm font-semibold justify-center gap-2 touch-manipulation"
         >
           <Plus className="h-4 w-4" />
           Add Item
         </Button>
       </div>
 
-      {/* KPI Metric Summary Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-3">
-        <MetricCard
-          label="Total Items"
-          count={metrics.total}
-          variant="default"
-          active={statusFilter === 'all'}
-          onClick={() => setStatusFilter('all')}
-        />
-        <MetricCard
-          label="Expired"
-          count={metrics.expired}
-          variant="danger"
-          active={statusFilter === 'expired'}
-          onClick={() => setStatusFilter('expired')}
-        />
-        <MetricCard
-          label="Expiring Soon"
-          count={metrics.expiring}
-          variant="warning"
-          active={statusFilter === 'expiring'}
-          onClick={() => setStatusFilter('expiring')}
-        />
-        <MetricCard
-          label="Warranty Ending"
-          count={metrics.warrantySoon}
-          variant="info"
-          active={statusFilter === 'warranty'}
-          onClick={() => setStatusFilter('warranty')}
-        />
-        <MetricCard
-          label="Renewals Due"
-          count={metrics.renewalsSoon}
-          variant="purple"
-          active={statusFilter === 'renewal'}
-          onClick={() => setStatusFilter('renewal')}
-        />
+      {/* Swipeable KPI Ribbon on Mobile */}
+      <div className="flex sm:grid sm:grid-cols-5 gap-2 overflow-x-auto pb-1 sm:pb-0 snap-x snap-mandatory scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
+          <MetricCard
+            label="Total Items"
+            count={metrics.total}
+            variant="default"
+            active={statusFilter === 'all'}
+            onClick={() => setStatusFilter('all')}
+          />
+        </div>
+        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
+          <MetricCard
+            label="Expired"
+            count={metrics.expired}
+            variant="danger"
+            active={statusFilter === 'expired'}
+            onClick={() => setStatusFilter('expired')}
+          />
+        </div>
+        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
+          <MetricCard
+            label="Expiring"
+            count={metrics.expiring}
+            variant="warning"
+            active={statusFilter === 'expiring'}
+            onClick={() => setStatusFilter('expiring')}
+          />
+        </div>
+        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
+          <MetricCard
+            label="Warranty"
+            count={metrics.warrantySoon}
+            variant="info"
+            active={statusFilter === 'warranty'}
+            onClick={() => setStatusFilter('warranty')}
+          />
+        </div>
+        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
+          <MetricCard
+            label="Renewals"
+            count={metrics.renewalsSoon}
+            variant="purple"
+            active={statusFilter === 'renewal'}
+            onClick={() => setStatusFilter('renewal')}
+          />
+        </div>
       </div>
 
-      {/* Search Input Bar */}
+      {/* Search Input (No iOS Zoom) */}
       <div className="relative w-full">
-        <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
+        <Search className="absolute left-3.5 top-3 sm:top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
         <Input
-          placeholder="Search by name, brand, location, lot no, policy no, serial no..."
+          placeholder="Search items, brands, serial no..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
+          className="pl-10 h-11 sm:h-9 text-base sm:text-sm"
         />
       </div>
 
-      {/* Multi-Facet Filter Controls */}
+      {/* Filter Tabs */}
       <FilterTabs
         currentStatus={statusFilter}
         onStatusChange={setStatusFilter}
@@ -250,7 +263,7 @@ function MainVaultDashboard() {
         onClearFilters={handleClearFilters}
       />
 
-      {/* View Header & Layout Mode Switcher */}
+      {/* View Header & Mode Switcher */}
       <div className="flex items-center justify-between pt-1">
         <div>
           <h3 className="text-sm font-bold text-slate-800">
@@ -264,7 +277,7 @@ function MainVaultDashboard() {
         <ViewModeSelector currentMode={groupMode} onChange={setGroupMode} />
       </div>
 
-      {/* Items Stream / Grouped Lists */}
+      {/* Items List */}
       {isLoading ? (
         <LoadingSkeleton count={3} />
       ) : processedItems.length === 0 ? (
@@ -272,10 +285,10 @@ function MainVaultDashboard() {
           title="No items found"
           description={
             hasActiveFilters
-              ? 'No records match your active search, category, or status criteria.'
-              : 'Your vault is clear. Add your first item to start tracking deadlines.'
+              ? 'No items match your active search or filter criteria.'
+              : 'Your vault is clear. Tap "Add Item" to track your first product or document.'
           }
-          actionLabel={hasActiveFilters ? 'Clear Filters' : 'Add Item'}
+          actionLabel={hasActiveFilters ? 'Reset Filters' : 'Add Item'}
           onAction={
             hasActiveFilters
               ? handleClearFilters
@@ -287,10 +300,9 @@ function MainVaultDashboard() {
           }
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {itemGroups.map((group) => (
-            <div key={group.id} className="space-y-2.5">
-              {/* Group Header (if grouped) */}
+            <div key={group.id} className="space-y-2">
               {groupMode !== 'none' && (
                 <div className="flex items-center gap-2 border-b border-slate-100 pb-1.5">
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
@@ -302,8 +314,7 @@ function MainVaultDashboard() {
                 </div>
               )}
 
-              {/* Items in this group */}
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {group.items.map((proc) => (
                   <ItemCard
                     key={proc.item.id}
