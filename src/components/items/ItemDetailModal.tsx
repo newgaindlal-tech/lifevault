@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { VaultItem } from '@/lib/items';
 import { ITEM_CATEGORIES } from '@/types';
+import { DocumentManager } from '@/components/items/DocumentManager';
 import {
   X,
   Calendar,
@@ -51,8 +52,8 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs overflow-y-auto">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 my-8">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-100 pb-3">
           <div>
@@ -152,6 +153,11 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
               <p className="whitespace-pre-wrap text-slate-700">{item.notes}</p>
             </div>
           )}
+
+          {/* Document & Receipt Attachment Section */}
+          <div className="border-t border-slate-100 pt-3">
+            <DocumentManager itemId={item.id} />
+          </div>
         </div>
 
         {/* Action Controls */}
@@ -162,7 +168,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
             className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-colors disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" />
-            {isDeleting ? 'Deleting...' : 'Delete'}
+            {isDeleting ? 'Deleting...' : 'Delete Item'}
           </button>
 
           <div className="flex items-center gap-2">

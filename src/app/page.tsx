@@ -21,6 +21,7 @@ import {
   ItemPayload,
 } from '@/lib/items';
 import { calculateItemUrgency } from '@/lib/dateUtils';
+import { generateDueReminders } from '@/lib/reminders';
 import { ITEM_CATEGORIES } from '@/types';
 import { Search, Plus, ShieldCheck, Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -50,12 +51,14 @@ function MainVaultDashboard() {
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [viewingItem, setViewingItem] = useState<VaultItem | null>(null);
 
-  // Load items from Supabase
+  // Load items from Supabase & evaluate upcoming reminders
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await fetchUserItems();
       setItems(data);
+      // Silently sync reminders for in-app bell notification
+      await generateDueReminders();
     } catch (err) {
       console.error('Failed to load vault items:', err);
     } finally {
@@ -81,12 +84,16 @@ function MainVaultDashboard() {
       setItems((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
       setViewingItem(updated);
     }
+    await generateDueReminders();
+    // घंटी को तुरंत ताज़ा करने का सिग्नल भेजें
+    window.dispatchEvent(new Event('vault-items-updated'));
   };
 
-  // Handle Delete
+// Handle Delete
   const handleDeleteItem = async (id: string) => {
     await deleteVaultItem(id);
     setItems((prev) => prev.filter((it) => it.id !== id));
+    window.dispatchEvent(new Event('vault-items-updated'));
   };
 
   // Aggregate Metrics & Counts
