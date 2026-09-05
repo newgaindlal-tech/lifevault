@@ -4,8 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ItemDocument } from '@/types';
 import {
   fetchItemDocuments,
-  uploadItemDocument,
-  deleteItemDocument,
+  uploadDocument,
+  deleteDocument,
 } from '@/lib/documents';
 import {
   FileText,
@@ -21,6 +21,27 @@ interface DocumentManagerProps {
   itemId: string;
 }
 
+type DocumentPayload = Partial<ItemDocument> & {
+  signedUrl?: string | null;
+  signed_url?: string | null;
+  file_size_bytes?: number | string | null;
+  size_bytes?: number | string | null;
+  size?: number | string | null;
+  uploaded_at?: string | null;
+  created_at?: string | null;
+  createdAt?: string | null;
+};
+
+const normalizeDocument = (doc?: DocumentPayload): ItemDocument => {
+  return {
+    ...(doc ?? {}),
+    file_size_bytes: Number(doc?.file_size_bytes ?? doc?.size_bytes ?? doc?.size ?? 0),
+    uploaded_at:
+      doc?.uploaded_at ?? doc?.created_at ?? doc?.createdAt ?? new Date().toISOString(),
+    signedUrl: doc?.signedUrl ?? doc?.signed_url ?? null,
+  } as ItemDocument;
+};
+
 export const DocumentManager: React.FC<DocumentManagerProps> = ({ itemId }) => {
   const [documents, setDocuments] = useState<ItemDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,7 +55,9 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ itemId }) => {
       setIsLoading(true);
       try {
         const docs = await fetchItemDocuments(itemId);
-        if (isMounted) setDocuments(docs);
+        const normalizedDocs: ItemDocument[] = docs.map((doc: DocumentPayload) => normalizeDocument(doc));
+
+        if (isMounted) setDocuments(normalizedDocs);
       } catch (err: unknown) {
         if (isMounted) {
           setErrorMessage(err instanceof Error ? err.message : 'Failed to load documents');
@@ -58,8 +81,9 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ itemId }) => {
     setIsUploading(true);
 
     try {
-      const newDoc = await uploadItemDocument(itemId, file);
-      setDocuments((prev) => [newDoc, ...prev]);
+      const newDoc = await uploadDocument(itemId, file);
+      const normalizedNewDoc: ItemDocument = normalizeDocument(newDoc as DocumentPayload);
+      setDocuments((prev) => [normalizedNewDoc, ...prev]);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Upload failed');
@@ -72,7 +96,17 @@ export const DocumentManager: React.FC<DocumentManagerProps> = ({ itemId }) => {
     if (!confirm(`Delete "${doc.file_name}"?`)) return;
 
     try {
-      await deleteItemDocument(doc.id, doc.file_path);
+      const record: Parameters<typeof deleteDocument>[0] = {
+        id: doc.id,
+        user_id: (doc as ItemDocument & { user_id?: string }).user_id ?? '',
+        item_id: itemId,
+        file_name: doc.file_name,
+        file_path: (doc as ItemDocument & { file_path?: string; storage_path?: string }).file_path ?? (doc as ItemDocument & { storage_path?: string }).storage_path ?? doc.file_name,
+        file_size: doc.file_size_bytes,
+        mime_type: doc.mime_type,
+        created_at: doc.uploaded_at,
+      };
+      await deleteDocument(record);
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
     } catch {
       alert('Could not delete document.');

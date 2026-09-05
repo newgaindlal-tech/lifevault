@@ -2,12 +2,14 @@
 
 import React from 'react';
 import { resolveBrandSupport } from '@/lib/brandSupport';
+import { sanitizeWebUrl } from '@/lib/sanitize';
 import {
   ExternalLink,
   Phone,
   MessageSquare,
   MapPin,
   HelpCircle,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface BrandSupportAssistantProps {
@@ -21,10 +23,11 @@ export const BrandSupportAssistant: React.FC<BrandSupportAssistantProps> = ({
   productName,
   customSupportUrl,
 }) => {
-  const { hasKnownSupport, supportInfo, customUrl, searchFallbackUrl } = resolveBrandSupport(
+  const safeCustomUrl = sanitizeWebUrl(customSupportUrl);
+  const { hasKnownSupport, supportInfo, searchFallbackUrl } = resolveBrandSupport(
     brand,
     productName,
-    customSupportUrl
+    safeCustomUrl
   );
 
   return (
@@ -41,14 +44,14 @@ export const BrandSupportAssistant: React.FC<BrandSupportAssistantProps> = ({
         )}
       </div>
 
-      {/* 1. Custom User-Saved Support URL (if available) */}
-      {customUrl && (
+      {/* 1. Sanitized Custom User-Saved Support URL */}
+      {safeCustomUrl ? (
         <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50/60 p-2 text-xs">
           <span className="text-blue-900 font-medium truncate pr-2">
             Custom Support Link Saved
           </span>
           <a
-            href={customUrl}
+            href={safeCustomUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-blue-700 hover:text-blue-900 font-semibold whitespace-nowrap"
@@ -57,13 +60,17 @@ export const BrandSupportAssistant: React.FC<BrandSupportAssistantProps> = ({
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
-      )}
+      ) : customSupportUrl ? (
+        <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-[11px] text-amber-800 border border-amber-200">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+          <span>Invalid or unsafe link protocol detected. Only https:// links are supported.</span>
+        </div>
+      ) : null}
 
       {/* 2. Verified Brand Directory Entry */}
       {hasKnownSupport && supportInfo && (
         <div className="space-y-2 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {/* Toll Free Phone */}
             {supportInfo.tollFreeNumber && (
               <a
                 href={`tel:${supportInfo.tollFreeNumber.replace(/\s+/g, '')}`}
@@ -77,7 +84,6 @@ export const BrandSupportAssistant: React.FC<BrandSupportAssistantProps> = ({
               </a>
             )}
 
-            {/* Official WhatsApp Line */}
             {supportInfo.whatsappNumber && (
               <a
                 href={`https://wa.me/${supportInfo.whatsappNumber}`}
@@ -95,7 +101,6 @@ export const BrandSupportAssistant: React.FC<BrandSupportAssistantProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            {/* Official Support Web Portal */}
             <a
               href={supportInfo.officialSupportUrl}
               target="_blank"
@@ -106,7 +111,6 @@ export const BrandSupportAssistant: React.FC<BrandSupportAssistantProps> = ({
               <span>{supportInfo.brandName} Support Portal</span>
             </a>
 
-            {/* Service Center Locator */}
             {supportInfo.serviceCenterLocatorUrl && (
               <a
                 href={supportInfo.serviceCenterLocatorUrl}
@@ -126,7 +130,7 @@ export const BrandSupportAssistant: React.FC<BrandSupportAssistantProps> = ({
       {!hasKnownSupport && (
         <div className="space-y-1.5 text-xs text-slate-600">
           <p className="text-[11px] text-slate-500">
-            No pre-indexed service directory for &quot;{brand || productName || 'this item'}&quot;. You can launch a verified official support search:
+            No pre-indexed service directory for &quot;{brand || productName || 'this item'}&quot;.
           </p>
           <a
             href={searchFallbackUrl}

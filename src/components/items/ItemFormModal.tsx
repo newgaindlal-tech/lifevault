@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ItemCategory, ITEM_CATEGORIES } from '@/types';
 import { ItemPayload, VaultItem } from '@/lib/items';
 import { ExtractedFields } from '@/lib/ocrExtractor';
 import { OcrScannerModal } from '@/components/items/OcrScannerModal';
+import { sanitizeWebUrl, sanitizePlainText } from '@/lib/sanitize';
 import { X, AlertCircle, Camera } from 'lucide-react';
 
 interface ItemFormModalProps {
@@ -15,6 +16,16 @@ interface ItemFormModalProps {
   mode: 'add' | 'edit';
 }
 
+function isValidDateString(dateStr?: string | null): boolean {
+  if (!dateStr) return true;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) return false;
+  const year = parseInt(match[1], 10);
+  if (year < 1970 || year > 2099) return false;
+  const d = new Date(dateStr);
+  return !isNaN(d.getTime());
+}
+
 export default function ItemFormModal({
   isOpen,
   onClose,
@@ -22,69 +33,84 @@ export default function ItemFormModal({
   initialData,
   mode,
 }: ItemFormModalProps) {
-  const [category, setCategory] = useState<ItemCategory>(() =>
-    initialData && mode === 'edit' ? initialData.category : 'medicine'
-  );
-  const [name, setName] = useState(() => (initialData && mode === 'edit' ? initialData.name || '' : ''));
-  const [brand, setBrand] = useState(() => (initialData && mode === 'edit' ? initialData.brand || '' : ''));
-  const [provider, setProvider] = useState(() =>
-    initialData && mode === 'edit' ? initialData.provider || '' : ''
-  );
-  const [expiryDate, setExpiryDate] = useState(() =>
-    initialData && mode === 'edit' ? initialData.expiry_date || '' : ''
-  );
-  const [warrantyUntil, setWarrantyUntil] = useState(() =>
-    initialData && mode === 'edit' ? initialData.warranty_until || '' : ''
-  );
-  const [purchaseDate, setPurchaseDate] = useState(() =>
-    initialData && mode === 'edit' ? initialData.purchase_date || '' : ''
-  );
-  const [purchasePrice, setPurchasePrice] = useState(() =>
-    initialData && mode === 'edit' && initialData.purchase_price
-      ? String(initialData.purchase_price)
-      : ''
-  );
-  const [serialNumber, setSerialNumber] = useState(() =>
-    initialData && mode === 'edit' ? initialData.serial_number || '' : ''
-  );
-  const [batchNumber, setBatchNumber] = useState(() =>
-    initialData && mode === 'edit' ? initialData.batch_number || '' : ''
-  );
-  const [locationTag, setLocationTag] = useState(() =>
-    initialData && mode === 'edit' ? initialData.location_tag || '' : ''
-  );
-  const [policyNumber, setPolicyNumber] = useState(() =>
-    initialData && mode === 'edit' ? initialData.policy_number || '' : ''
-  );
-  const [renewalType, setRenewalType] = useState(() =>
-    initialData && mode === 'edit' ? initialData.renewal_type || '' : ''
-  );
-  const [notes, setNotes] = useState(() => (initialData && mode === 'edit' ? initialData.notes || '' : ''));
-  const [supportUrl, setSupportUrl] = useState(() =>
-    initialData && mode === 'edit' ? initialData.support_url || '' : ''
-  );
+  const [category, setCategory] = useState<ItemCategory>('medicine');
+  const [name, setName] = useState('');
+  const [brand, setBrand] = useState('');
+  const [provider, setProvider] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [warrantyUntil, setWarrantyUntil] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState('');
+  const [purchasePrice, setPurchasePrice] = useState('');
+  const [serialNumber, setSerialNumber] = useState('');
+  const [batchNumber, setBatchNumber] = useState('');
+  const [locationTag, setLocationTag] = useState('');
+  const [policyNumber, setPolicyNumber] = useState('');
+  const [renewalType, setRenewalType] = useState('');
+  const [notes, setNotes] = useState('');
+  const [supportUrl, setSupportUrl] = useState('');
 
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOcrOpen, setIsOcrOpen] = useState(false);
+
+  useEffect(() => {
+    const resetForm = () => {
+      if (initialData && mode === 'edit') {
+        setCategory(initialData.category);
+        setName(initialData.name || '');
+        setBrand(initialData.brand || '');
+        setProvider(initialData.provider || '');
+        setExpiryDate(initialData.expiry_date || '');
+        setWarrantyUntil(initialData.warranty_until || '');
+        setPurchaseDate(initialData.purchase_date || '');
+        setPurchasePrice(initialData.purchase_price ? String(initialData.purchase_price) : '');
+        setSerialNumber(initialData.serial_number || '');
+        setBatchNumber(initialData.batch_number || '');
+        setLocationTag(initialData.location_tag || '');
+        setPolicyNumber(initialData.policy_number || '');
+        setRenewalType(initialData.renewal_type || '');
+        setNotes(initialData.notes || '');
+        setSupportUrl(initialData.support_url || '');
+      } else {
+        setCategory('medicine');
+        setName('');
+        setBrand('');
+        setProvider('');
+        setExpiryDate('');
+        setWarrantyUntil('');
+        setPurchaseDate('');
+        setPurchasePrice('');
+        setSerialNumber('');
+        setBatchNumber('');
+        setLocationTag('');
+        setPolicyNumber('');
+        setRenewalType('');
+        setNotes('');
+        setSupportUrl('');
+      }
+      setFormError(null);
+    };
+    resetForm();
+  }, [initialData, mode, isOpen]);
 
   if (!isOpen) return null;
 
   const currentCategoryMeta = ITEM_CATEGORIES.find((c) => c.id === category) || ITEM_CATEGORIES[0];
 
   const handleApplyOcrData = (data: Partial<ExtractedFields>) => {
-    if (data.name) setName(data.name);
-    if (data.expiryDate) setExpiryDate(data.expiryDate);
-    if (data.batchNumber) setBatchNumber(data.batchNumber);
-    if (data.invoiceNumber && !policyNumber) setPolicyNumber(data.invoiceNumber);
+    if (data.name) setName(sanitizePlainText(data.name, 100));
+    if (data.expiryDate && isValidDateString(data.expiryDate)) setExpiryDate(data.expiryDate);
+    if (data.batchNumber) setBatchNumber(sanitizePlainText(data.batchNumber, 50));
+    if (data.invoiceNumber && !policyNumber) setPolicyNumber(sanitizePlainText(data.invoiceNumber, 50));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
-    if (!name.trim()) {
-      setFormError('Please enter a name for this item.');
+    const cleanName = sanitizePlainText(name, 120);
+    if (!cleanName) {
+      setFormError('Please enter a valid item name.');
       return;
     }
 
@@ -98,30 +124,51 @@ export default function ItemFormModal({
       return;
     }
 
-    if (currentCategoryMeta.requiresRenewal && !expiryDate) {
-      setFormError('Please select the Renewal/Expiry Date.');
+    // Validate dates are in acceptable ranges
+    if (!isValidDateString(expiryDate) || !isValidDateString(warrantyUntil) || !isValidDateString(purchaseDate)) {
+      setFormError('One or more dates are invalid. Years must be between 1970 and 2099.');
       return;
+    }
+
+    // Price validation
+    let parsedPrice: number | null = null;
+    if (purchasePrice.trim()) {
+      parsedPrice = parseFloat(purchasePrice);
+      if (isNaN(parsedPrice) || parsedPrice < 0 || parsedPrice > 100000000) {
+        setFormError('Purchase price must be a positive number up to 100,000,000.');
+        return;
+      }
+    }
+
+    // URL validation
+    let cleanUrl: string | null = null;
+    if (supportUrl.trim()) {
+      cleanUrl = sanitizeWebUrl(supportUrl);
+      if (!cleanUrl) {
+        setFormError('Invalid support link. URLs must begin with http:// or https://');
+        return;
+      }
     }
 
     setIsSubmitting(true);
 
     try {
       await onSubmit({
-        name: name.trim(),
+        name: cleanName,
         category,
-        brand: brand.trim() || null,
-        provider: provider.trim() || null,
+        brand: sanitizePlainText(brand, 80) || null,
+        provider: sanitizePlainText(provider, 80) || null,
         expiry_date: expiryDate || null,
         warranty_until: warrantyUntil || null,
         purchase_date: purchaseDate || null,
-        purchase_price: purchasePrice ? parseFloat(purchasePrice) : null,
-        serial_number: serialNumber.trim() || null,
-        batch_number: batchNumber.trim() || null,
-        location_tag: locationTag.trim() || null,
-        policy_number: policyNumber.trim() || null,
-        renewal_type: renewalType.trim() || null,
-        notes: notes.trim() || null,
-        support_url: supportUrl.trim() || null,
+        purchase_price: parsedPrice,
+        serial_number: sanitizePlainText(serialNumber, 60) || null,
+        batch_number: sanitizePlainText(batchNumber, 60) || null,
+        location_tag: sanitizePlainText(locationTag, 80) || null,
+        policy_number: sanitizePlainText(policyNumber, 80) || null,
+        renewal_type: sanitizePlainText(renewalType, 50) || null,
+        notes: sanitizePlainText(notes, 1000) || null,
+        support_url: cleanUrl,
       });
       onClose();
     } catch (err: unknown) {
@@ -147,7 +194,6 @@ export default function ItemFormModal({
             </button>
           </div>
 
-          {/* OCR Assistant Trigger Button */}
           <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-slate-700">
               <Camera className="h-4 w-4 text-emerald-600" />
@@ -170,7 +216,6 @@ export default function ItemFormModal({
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Category Selector */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Select Category *
@@ -188,7 +233,6 @@ export default function ItemFormModal({
               </select>
             </div>
 
-            {/* Primary Name Field */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Item / Product Name *
@@ -196,14 +240,13 @@ export default function ItemFormModal({
               <input
                 type="text"
                 required
+                maxLength={120}
                 placeholder={
                   category === 'medicine'
                     ? 'e.g. Paracetamol 650mg'
                     : category === 'warranty'
                     ? 'e.g. Microwave Oven 28L'
-                    : category === 'insurance'
-                    ? 'e.g. Comprehensive Car Insurance'
-                    : 'e.g. Olive Oil 500ml'
+                    : 'e.g. Health Insurance'
                 }
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -211,7 +254,6 @@ export default function ItemFormModal({
               />
             </div>
 
-            {/* Brand / Manufacturer */}
             {(currentCategoryMeta.group === 'consumable' || currentCategoryMeta.group === 'durables') && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -219,7 +261,8 @@ export default function ItemFormModal({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Samsung, Apple, LG, HP, Cipla"
+                  maxLength={80}
+                  placeholder="e.g. Samsung, Apple, Cipla"
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -227,7 +270,6 @@ export default function ItemFormModal({
               </div>
             )}
 
-            {/* Provider / Insurer */}
             {currentCategoryMeta.group === 'renewals' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -236,7 +278,8 @@ export default function ItemFormModal({
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. HDFC ERGO, RTO, UIDAI"
+                    maxLength={80}
+                    placeholder="e.g. HDFC ERGO, RTO"
                     value={provider}
                     onChange={(e) => setProvider(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -248,28 +291,16 @@ export default function ItemFormModal({
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. POL-9920194 or MH-02-..."
+                    maxLength={80}
+                    placeholder="e.g. POL-9920194"
                     value={policyNumber}
                     onChange={(e) => setPolicyNumber(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Renewal Type (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Annual, Monthly, Comprehensive, Third-Party"
-                    value={renewalType}
-                    onChange={(e) => setRenewalType(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
             )}
 
-            {/* Category Dates */}
             {category !== 'warranty' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
@@ -279,6 +310,8 @@ export default function ItemFormModal({
                   <input
                     type="date"
                     required
+                    min="1970-01-01"
+                    max="2099-12-31"
                     value={expiryDate}
                     onChange={(e) => setExpiryDate(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -290,7 +323,8 @@ export default function ItemFormModal({
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. Kitchen Top Shelf, Medicine Box"
+                    maxLength={80}
+                    placeholder="e.g. Top Shelf, First Aid Box"
                     value={locationTag}
                     onChange={(e) => setLocationTag(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -309,6 +343,8 @@ export default function ItemFormModal({
                     <input
                       type="date"
                       required
+                      min="1970-01-01"
+                      max="2099-12-31"
                       value={warrantyUntil}
                       onChange={(e) => setWarrantyUntil(e.target.value)}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -320,6 +356,8 @@ export default function ItemFormModal({
                     </label>
                     <input
                       type="date"
+                      min="1970-01-01"
+                      max="2099-12-31"
                       value={purchaseDate}
                       onChange={(e) => setPurchaseDate(e.target.value)}
                       className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -330,11 +368,13 @@ export default function ItemFormModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Purchase Price (Optional)
+                      Purchase Price (₹)
                     </label>
                     <input
                       type="number"
                       step="0.01"
+                      min="0"
+                      max="100000000"
                       placeholder="e.g. 24999.00"
                       value={purchasePrice}
                       onChange={(e) => setPurchasePrice(e.target.value)}
@@ -343,10 +383,11 @@ export default function ItemFormModal({
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Serial Number (Optional)
+                      Serial Number
                     </label>
                     <input
                       type="text"
+                      maxLength={60}
                       placeholder="e.g. S/N 884920412"
                       value={serialNumber}
                       onChange={(e) => setSerialNumber(e.target.value)}
@@ -357,21 +398,20 @@ export default function ItemFormModal({
               </div>
             )}
 
-            {/* Custom Support / Service URL */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Official Support Link or Service Ticket (Optional)
               </label>
               <input
                 type="url"
-                placeholder="https://brand.com/support or service ticket link"
+                maxLength={200}
+                placeholder="https://brand.com/support"
                 value={supportUrl}
                 onChange={(e) => setSupportUrl(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
 
-            {/* Batch number for Medicine & Food */}
             {(category === 'medicine' || category === 'first_aid' || category === 'supplement') && (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -379,6 +419,7 @@ export default function ItemFormModal({
                 </label>
                 <input
                   type="text"
+                  maxLength={60}
                   placeholder="e.g. B-99382"
                   value={batchNumber}
                   onChange={(e) => setBatchNumber(e.target.value)}
@@ -387,21 +428,20 @@ export default function ItemFormModal({
               </div>
             )}
 
-            {/* Notes */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Notes / Remarks (Optional)
               </label>
               <textarea
                 rows={2}
-                placeholder="Dosage notes, invoice location, renewal terms..."
+                maxLength={1000}
+                placeholder="Dosage notes, invoice location..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
 
-            {/* Action Buttons */}
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"

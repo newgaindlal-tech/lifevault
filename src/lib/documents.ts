@@ -1,138 +1,68 @@
 import { supabase } from '@/lib/supabase';
-import { ItemDocument } from '@/types';
 
-const BUCKET_NAME = 'item-documents';
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-
-/**
- * Compresses an image client-side via HTML5 canvas before uploading.
- * Leaves PDFs untouched.
- */
-async function compressImageIfApplicable(file: File): Promise<Blob | File> {
-  if (file.type === 'application/pdf') return file;
-
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-
-      // Restrict max resolution dimension to 1600px
-      const maxDim = 1600;
-      if (width > maxDim || height > maxDim) {
-        if (width > height) {
-          height = Math.round((height * maxDim) / width);
-          width = maxDim;
-        } else {
-          width = Math.round((width * maxDim) / height);
-          height = maxDim;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        resolve(file);
-        return;
-      }
-
-      ctx.drawImage(img, 0, 0, width, height);
-      canvas.toBlob(
-        (blob) => {
-          resolve(blob || file);
-        },
-        'image/jpeg',
-        0.82 // 82% quality delivers sharp receipt text at ~250KB
-      );
-    };
-    img.onerror = () => resolve(file);
-  });
+export interface DocumentRecord {
+  id: string;
+  item_id: string;
+  user_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  mime_type: string;
+  created_at: string;
 }
 
-// 1. Fetch documents associated with an item
-export async function fetchItemDocuments(itemId: string): Promise<ItemDocument[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthenticated');
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+]);
 
-  const { data, error } = await supabase
-    .from('item_documents')
-    .select('*')
-    .eq('item_id', itemId)
-    .order('uploaded_at', { ascending: false });
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB ceiling
 
-  if (error) {
-    console.error('Error fetching documents:', error);
-    throw new Error(error.message);
+export async function uploadDocument(
+  itemId: string,
+  file: File
+): Promise<DocumentRecord> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Unauthenticated');
+
+  // 1. File Size Validation
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    throw new Error('File exceeds maximum allowable size of 5 MB.');
   }
 
-  const docs = (data as ItemDocument[]) || [];
-
-  // Generate safe temporary signed URLs for each file (valid for 60 mins)
-  const docsWithSignedUrls = await Promise.all(
-    docs.map(async (doc) => {
-      const { data: urlData } = await supabase.storage
-        .from(BUCKET_NAME)
-        .createSignedUrl(doc.file_path, 3600);
-
-      return {
-        ...doc,
-        signedUrl: urlData?.signedUrl || undefined,
-      };
-    })
-  );
-
-  return docsWithSignedUrls;
-}
-
-// 2. Upload a new document and register in PostgreSQL
-export async function uploadItemDocument(itemId: string, file: File): Promise<ItemDocument> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthenticated');
-
-  // File type validation
-  if (!ALLOWED_TYPES.includes(file.type)) {
-    throw new Error('Invalid file type. Only JPG, PNG, WebP, and PDF documents are allowed.');
+  // 2. MIME Type Validation
+  if (!ALLOWED_MIME_TYPES.has(file.type)) {
+    throw new Error('Unsupported file type. Only JPEG, PNG, WebP, and PDF are allowed.');
   }
 
-  // File size validation
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error('File exceeds the 10 MB size limit.');
-  }
+  // 3. Isolated, sanitized storage path
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const filePath = `${session.user.id}/${itemId}/${Date.now()}_${sanitizedName}`;
 
-  // Compress photo before uploading
-  const uploadPayload = await compressImageIfApplicable(file);
-
-  // Secure isolated path: userId/itemId/timestamp-filename
-  const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const storagePath = `${user.id}/${itemId}/${Date.now()}-${cleanFileName}`;
-
-  // Upload to Supabase Storage
-  const { error: storageError } = await supabase.storage
-    .from(BUCKET_NAME)
-    .upload(storagePath, uploadPayload, {
-      contentType: file.type,
+  const { error: uploadError } = await supabase.storage
+    .from('vault_documents')
+    .upload(filePath, file, {
+      cacheControl: '3600',
       upsert: false,
     });
 
-  if (storageError) {
-    console.error('Storage upload error:', storageError);
-    throw new Error(`Upload failed: ${storageError.message}`);
+  if (uploadError) {
+    console.error('Storage upload error:', uploadError);
+    throw new Error(`Upload failed: ${uploadError.message}`);
   }
 
-  // Register file metadata in item_documents table
-  const { data: docRecord, error: dbError } = await supabase
-    .from('item_documents')
+  // 4. Save metadata record
+  const { data, error: dbError } = await supabase
+    .from('documents')
     .insert([
       {
         item_id: itemId,
-        user_id: user.id,
-        file_path: storagePath,
-        file_name: file.name,
-        file_size_bytes: file.size,
+        user_id: session.user.id,
+        file_name: sanitizedName,
+        file_path: filePath,
+        file_size: file.size,
         mime_type: file.type,
       },
     ])
@@ -140,43 +70,62 @@ export async function uploadItemDocument(itemId: string, file: File): Promise<It
     .single();
 
   if (dbError) {
-    // If DB insert fails, cleanup orphaned file in storage
-    await supabase.storage.from(BUCKET_NAME).remove([storagePath]);
-    throw new Error(`Database record failed: ${dbError.message}`);
+    // Rollback file from storage if DB record insertion fails
+    await supabase.storage.from('vault_documents').remove([filePath]);
+    throw new Error(`Database error: ${dbError.message}`);
   }
 
-  // Generate immediate signed URL for display
-  const { data: urlData } = await supabase.storage
-    .from(BUCKET_NAME)
-    .createSignedUrl(storagePath, 3600);
-
-  return {
-    ...(docRecord as ItemDocument),
-    signedUrl: urlData?.signedUrl,
-  };
+  return data as DocumentRecord;
 }
 
-// 3. Delete a document from Storage and Database
-export async function deleteItemDocument(documentId: string, storagePath: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthenticated');
+export async function fetchItemDocuments(itemId: string): Promise<DocumentRecord[]> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return [];
 
-  // Delete from Storage first
-  const { error: storageError } = await supabase.storage
-    .from(BUCKET_NAME)
-    .remove([storagePath]);
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('item_id', itemId)
+    .eq('user_id', session.user.id)
+    .order('created_at', { ascending: false });
 
-  if (storageError) {
-    console.warn('Storage delete warning:', storageError);
+  if (error) {
+    console.error('Error fetching documents:', error);
+    return [];
   }
 
-  // Delete record from DB
-  const { error: dbError } = await supabase
-    .from('item_documents')
-    .delete()
-    .eq('id', documentId);
+  return (data as DocumentRecord[]) || [];
+}
 
-  if (dbError) {
-    throw new Error(dbError.message);
+export async function getDocumentSignedUrl(filePath: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('vault_documents')
+    .createSignedUrl(filePath, 300); // 5-minute expiry token
+
+  if (error || !data?.signedUrl) {
+    throw new Error('Unable to generate secure download link');
+  }
+
+  return data.signedUrl;
+}
+
+export async function deleteDocument(doc: DocumentRecord): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user || session.user.id !== doc.user_id) {
+    throw new Error('Unauthorized');
+  }
+
+  // Delete storage object first
+  await supabase.storage.from('vault_documents').remove([doc.file_path]);
+
+  // Delete DB metadata record
+  const { error } = await supabase
+    .from('documents')
+    .delete()
+    .eq('id', doc.id)
+    .eq('user_id', session.user.id);
+
+  if (error) {
+    throw new Error(`Delete failed: ${error.message}`);
   }
 }

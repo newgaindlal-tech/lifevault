@@ -27,8 +27,8 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressStatus, setProgressStatus] = useState<string>('');
   const [extracted, setExtracted] = useState<ExtractedFields | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Editable fields for user review before applying
   const [reviewedName, setReviewedName] = useState('');
   const [reviewedExpiry, setReviewedExpiry] = useState('');
   const [reviewedBatch, setReviewedBatch] = useState('');
@@ -42,30 +42,57 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Safety checks on image
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMessage('Image exceeds 10 MB. Please choose a smaller image.');
+      return;
+    }
+
+    setErrorMessage(null);
     setImagePreview(URL.createObjectURL(file));
     setIsProcessing(true);
     setProgressStatus('Initializing optical engine...');
     setExtracted(null);
 
-    try {
-      const worker = await createWorker('eng');
+    let worker: Tesseract.Worker | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
 
-      setProgressStatus('Recognizing text in document...');
-      const ret = await worker.recognize(file);
-      await worker.terminate();
+    try {
+      worker = await createWorker('eng');
+
+      // 20-second timeout guard
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('OCR engine timed out. Please enter fields manually.'));
+        }, 20000);
+      });
+
+      setProgressStatus('Reading text in document...');
+      const recognitionPromise = worker.recognize(file);
+
+      const ret = (await Promise.race([recognitionPromise, timeoutPromise])) as Tesseract.RecognizeResult;
+
+      if (timeoutId) clearTimeout(timeoutId);
 
       const parsed = parseOcrText(ret.data.text);
       setExtracted(parsed);
 
-      // Pre-fill editable verification fields
       setReviewedName(parsed.name || '');
       setReviewedExpiry(parsed.expiryDate || '');
       setReviewedBatch(parsed.batchNumber || '');
       setReviewedInvoice(parsed.invoiceNumber || '');
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('OCR Processing error:', err);
-      setProgressStatus('Could not extract text. Please enter values manually.');
+      const msg = err instanceof Error ? err.message : 'Could not extract text. Please enter values manually.';
+      setErrorMessage(msg);
     } finally {
+      if (worker) {
+        try {
+          await worker.terminate();
+        } catch {
+          // Ignore termination errors
+        }
+      }
       setIsProcessing(false);
     }
   };
@@ -93,7 +120,7 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
                 Scan Document / Box (Optional OCR)
               </h3>
               <p className="text-[11px] text-slate-500">
-                100% free & local. Text is extracted directly in your browser.
+                100% private. Text is processed locally on your device.
               </p>
             </div>
           </div>
@@ -105,7 +132,13 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
           </button>
         </div>
 
-        {/* Image Selection Area */}
+        {errorMessage && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
         {!imagePreview && (
           <div
             onClick={() => fileInputRef.current?.click()}
@@ -116,7 +149,7 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
               Upload photo of medicine strip, warranty, or receipt
             </span>
             <span className="block text-xs text-slate-400 mt-1">
-              Supports JPEG, PNG, WebP
+              Supports JPEG, PNG, WebP (Max 10 MB)
             </span>
             <input
               ref={fileInputRef}
@@ -128,7 +161,6 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
           </div>
         )}
 
-        {/* Processing State */}
         {isProcessing && (
           <div className="py-8 text-center space-y-3">
             <Loader2 className="h-8 w-8 text-emerald-600 animate-spin mx-auto" />
@@ -138,13 +170,12 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
           </div>
         )}
 
-        {/* Verification & Human-In-The-Loop Review Area */}
         {extracted && !isProcessing && (
           <div className="space-y-4">
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 flex items-start gap-2 text-xs text-amber-800">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
               <span>
-                <strong>Verify Extracted Data:</strong> Blurry or foil-backed text can produce errors. Confirm all critical dates before applying.
+                <strong>Verify Data:</strong> Check all critical dates before applying.
               </span>
             </div>
 
@@ -155,6 +186,7 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
                 </label>
                 <input
                   type="text"
+                  maxLength={120}
                   value={reviewedName}
                   onChange={(e) => setReviewedName(e.target.value)}
                   placeholder="Leave blank or edit..."
@@ -181,6 +213,7 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
                   </label>
                   <input
                     type="text"
+                    maxLength={60}
                     value={reviewedBatch}
                     onChange={(e) => setReviewedBatch(e.target.value)}
                     placeholder="e.g. B-994"
@@ -190,7 +223,6 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
               </div>
             </div>
 
-            {/* Extracted Raw Insights */}
             <details className="text-[11px] text-slate-500 pt-1">
               <summary className="cursor-pointer font-semibold hover:text-slate-700">
                 Show raw scanned text ({extracted.confidenceNotes.length} cues detected)
@@ -202,13 +234,13 @@ export const OcrScannerModal: React.FC<OcrScannerModalProps> = ({
           </div>
         )}
 
-        {/* Modal Controls */}
         <div className="flex items-center justify-between border-t border-slate-100 pt-4 mt-4">
           <button
             type="button"
             onClick={() => {
               setImagePreview(null);
               setExtracted(null);
+              setErrorMessage(null);
             }}
             disabled={isProcessing || !imagePreview}
             className="text-xs text-slate-500 hover:text-slate-800 disabled:opacity-30"
