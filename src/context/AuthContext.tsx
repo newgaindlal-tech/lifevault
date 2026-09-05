@@ -1,65 +1,83 @@
 'use client';
 
-import React, { createContext, useContext, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
 
-interface AuthContextValue {
-  user: unknown;
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
   isLoading: boolean;
+  signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-export const useAuth = (): AuthContextValue => {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-
-  return context;
+// सुरक्षित डिफ़ॉल्ट वैल्यू ताकि ऐप कभी क्रैश न हो
+const defaultAuthValue: AuthContextType = {
+  user: null,
+  session: null,
+  isLoading: true,
+  signOut: async () => {},
 };
 
-export const AuthProvider: React.FC<{
-  value: AuthContextValue;
-  children: React.ReactNode;
-}> = ({ value, children }) => (
-  <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-);
+const AuthContext = createContext<AuthContextType>(defaultAuthValue);
 
-interface AuthGuardProps {
-  children: React.ReactNode;
-}
-
-/**
- * AuthGuard intercepts rendering for protected application routes.
- * If unauthenticated, it redirects the browser to /auth/login.
- */
-export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
-  const { user, isLoading } = useAuth();
-  const router = useRouter();
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!isLoading && !user) {
-      router.replace('/auth/login');
-    }
-  }, [user, isLoading, router]);
+    // 1. एक्टिव सेशन चेक करें
+    const initializeAuth = async () => {
+      try {
+        const { data: { session: activeSession } } = await supabase.auth.getSession();
+        setSession(activeSession);
+        setUser(activeSession?.user ?? null);
+      } catch (error) {
+        console.error('Error fetching session:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  if (isLoading) {
-    return (
-      <div className="max-w-md mx-auto mt-12 p-6 space-y-4">
-        <div className="text-center text-xs font-semibold text-slate-500 animate-pulse">
-          Authenticating LifeVault Session...
-        </div>
-        <LoadingSkeleton count={2} />
-      </div>
+    initializeAuth();
+
+    // 2. ऑथ स्टेट बदलाव सुनें (login / logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, updatedSession) => {
+        setSession(updatedSession);
+        setUser(updatedSession?.user ?? null);
+        setIsLoading(false);
+      }
     );
-  }
 
-  if (!user) {
-    return null; // Prevents flashing protected UI while the redirect fires
-  }
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
-  return <>{children}</>;
+  const signOut = async () => {
+    setIsLoading(true);
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+    } catch (err) {
+      console.error('Error signing out:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// Safe Hook: यह एरर फेंकने के बजाय हमेशा वैध वैल्यू लौटाएगा
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  return context || defaultAuthValue;
 };

@@ -9,10 +9,6 @@ interface AuthGuardProps {
   children: React.ReactNode;
 }
 
-/**
- * AuthGuard intercepts rendering for protected application routes.
- * If unauthenticated, it redirects the browser to /auth/login.
- */
 export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   const { user, isLoading } = useAuth();
   const router = useRouter();
@@ -35,7 +31,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   }
 
   if (!user) {
-    return null; // Prevents flashing protected UI while the redirect fires
+    return null;
   }
 
   return <>{children}</>;

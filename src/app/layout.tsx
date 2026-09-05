@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Header } from "@/components/layout/Header";
+import { Providers } from "@/components/providers/Providers";
 
 export const metadata: Metadata = {
   title: "LifeVault - Expiry & Warranty Tracker",
@@ -14,11 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased selection:bg-emerald-100 selection:text-emerald-900">
-        <Header />
-        <main className="max-w-5xl mx-auto px-4 py-6 md:py-8 pb-20 md:pb-8">
+      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+        <Providers>
           {children}
-        </main>
+        </Providers>
       </body>
     </html>
   );
