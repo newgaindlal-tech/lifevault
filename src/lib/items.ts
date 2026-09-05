@@ -16,6 +16,7 @@ export interface ItemPayload {
   renewal_type?: string | null;
   policy_number?: string | null;
   notes?: string | null;
+  support_url?: string | null;
 }
 
 export interface VaultItem extends ItemPayload {
@@ -26,21 +27,25 @@ export interface VaultItem extends ItemPayload {
   updated_at: string;
 }
 
-// 1. Fetch all active items for logged-in user
+// 1. Fetch all active items for logged-in user with safe auth check
 export async function fetchUserItems(): Promise<VaultItem[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('You must be logged in to fetch vault items.');
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  
+  if (sessionError || !session?.user) {
+    // अगर यूजर अभी पूरी तरह ऑथेंटिकेट नहीं हुआ है तो शांत रहकर खाली लिस्ट लौटाएँ
+    return [];
+  }
 
   const { data, error } = await supabase
     .from('items')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', session.user.id)
     .eq('is_archived', false)
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error('Error fetching vault items:', error);
-    throw new Error(error.message);
+    console.error('Error fetching vault items:', error.message || error.details || JSON.stringify(error));
+    throw new Error(error.message || 'Failed to fetch items');
   }
 
   return (data as VaultItem[]) || [];
@@ -48,17 +53,17 @@ export async function fetchUserItems(): Promise<VaultItem[]> {
 
 // 2. Insert new item
 export async function createVaultItem(payload: ItemPayload): Promise<VaultItem> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('You must be logged in to create items.');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('You must be logged in to create items.');
 
   const { data, error } = await supabase
     .from('items')
-    .insert([{ ...payload, user_id: user.id }])
+    .insert([{ ...payload, user_id: session.user.id }])
     .select()
     .single();
 
   if (error) {
-    console.error('Error creating vault item:', error);
+    console.error('Error creating vault item:', error.message || error);
     throw new Error(error.message);
   }
 
@@ -67,19 +72,19 @@ export async function createVaultItem(payload: ItemPayload): Promise<VaultItem> 
 
 // 3. Update existing item
 export async function updateVaultItem(id: string, payload: Partial<ItemPayload>): Promise<VaultItem> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Unauthenticated');
 
   const { data, error } = await supabase
     .from('items')
     .update({ ...payload, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('user_id', session.user.id)
     .select()
     .single();
 
   if (error) {
-    console.error('Error updating vault item:', error);
+    console.error('Error updating vault item:', error.message || error);
     throw new Error(error.message);
   }
 
@@ -88,17 +93,17 @@ export async function updateVaultItem(id: string, payload: Partial<ItemPayload>)
 
 // 4. Delete item
 export async function deleteVaultItem(id: string): Promise<void> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthenticated');
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) throw new Error('Unauthenticated');
 
   const { error } = await supabase
     .from('items')
     .delete()
     .eq('id', id)
-    .eq('user_id', user.id);
+    .eq('user_id', session.user.id);
 
   if (error) {
-    console.error('Error deleting vault item:', error);
+    console.error('Error deleting vault item:', error.message || error);
     throw new Error(error.message);
   }
 }

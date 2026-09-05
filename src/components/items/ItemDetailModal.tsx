@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { VaultItem } from '@/lib/items';
 import { ITEM_CATEGORIES } from '@/types';
 import { DocumentManager } from '@/components/items/DocumentManager';
+import { BrandSupportAssistant } from '@/components/items/BrandSupportAssistant';
 import {
   X,
   Calendar,
@@ -65,7 +66,7 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
             </h3>
             {item.brand && (
               <p className="text-xs font-medium text-slate-500">
-                Brand: <span className="text-slate-800">{item.brand}</span>
+                Brand: <span className="text-slate-800 font-semibold">{item.brand}</span>
               </p>
             )}
           </div>
@@ -153,6 +154,15 @@ export const ItemDetailModal: React.FC<ItemDetailModalProps> = ({
               <p className="whitespace-pre-wrap text-slate-700">{item.notes}</p>
             </div>
           )}
+
+          {/* Service Center & Customer Care Assistant */}
+          <div className="border-t border-slate-100 pt-3">
+            <BrandSupportAssistant
+              brand={item.brand}
+              productName={item.name}
+              customSupportUrl={item.support_url}
+            />
+          </div>
 
           {/* Document & Receipt Attachment Section */}
           <div className="border-t border-slate-100 pt-3">

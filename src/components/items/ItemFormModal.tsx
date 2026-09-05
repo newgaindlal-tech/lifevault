@@ -15,34 +15,54 @@ interface ItemFormModalProps {
   mode: 'add' | 'edit';
 }
 
-export default function ItemFormModal(props: ItemFormModalProps) {
-  const itemKey = `${props.mode}-${props.initialData?.id ?? 'new'}-${props.isOpen}`;
-
-  return <ItemFormModalContent key={itemKey} {...props} />;
-}
-
-function ItemFormModalContent({
+export default function ItemFormModal({
   isOpen,
   onClose,
   onSubmit,
   initialData,
   mode,
 }: ItemFormModalProps) {
-  const editData = initialData && mode === 'edit' ? initialData : null;
-  const [category, setCategory] = useState<ItemCategory>(editData?.category || 'medicine');
-  const [name, setName] = useState(editData?.name || '');
-  const [brand, setBrand] = useState(editData?.brand || '');
-  const [provider, setProvider] = useState(editData?.provider || '');
-  const [expiryDate, setExpiryDate] = useState(editData?.expiry_date || '');
-  const [warrantyUntil, setWarrantyUntil] = useState(editData?.warranty_until || '');
-  const [purchaseDate, setPurchaseDate] = useState(editData?.purchase_date || '');
-  const [purchasePrice, setPurchasePrice] = useState(editData?.purchase_price ? String(editData.purchase_price) : '');
-  const [serialNumber, setSerialNumber] = useState(editData?.serial_number || '');
-  const [batchNumber, setBatchNumber] = useState(editData?.batch_number || '');
-  const [locationTag, setLocationTag] = useState(editData?.location_tag || '');
-  const [policyNumber, setPolicyNumber] = useState(editData?.policy_number || '');
-  const [renewalType] = useState(editData?.renewal_type || '');
-  const [notes, setNotes] = useState(editData?.notes || '');
+  const [category, setCategory] = useState<ItemCategory>(() =>
+    initialData && mode === 'edit' ? initialData.category : 'medicine'
+  );
+  const [name, setName] = useState(() => (initialData && mode === 'edit' ? initialData.name || '' : ''));
+  const [brand, setBrand] = useState(() => (initialData && mode === 'edit' ? initialData.brand || '' : ''));
+  const [provider, setProvider] = useState(() =>
+    initialData && mode === 'edit' ? initialData.provider || '' : ''
+  );
+  const [expiryDate, setExpiryDate] = useState(() =>
+    initialData && mode === 'edit' ? initialData.expiry_date || '' : ''
+  );
+  const [warrantyUntil, setWarrantyUntil] = useState(() =>
+    initialData && mode === 'edit' ? initialData.warranty_until || '' : ''
+  );
+  const [purchaseDate, setPurchaseDate] = useState(() =>
+    initialData && mode === 'edit' ? initialData.purchase_date || '' : ''
+  );
+  const [purchasePrice, setPurchasePrice] = useState(() =>
+    initialData && mode === 'edit' && initialData.purchase_price
+      ? String(initialData.purchase_price)
+      : ''
+  );
+  const [serialNumber, setSerialNumber] = useState(() =>
+    initialData && mode === 'edit' ? initialData.serial_number || '' : ''
+  );
+  const [batchNumber, setBatchNumber] = useState(() =>
+    initialData && mode === 'edit' ? initialData.batch_number || '' : ''
+  );
+  const [locationTag, setLocationTag] = useState(() =>
+    initialData && mode === 'edit' ? initialData.location_tag || '' : ''
+  );
+  const [policyNumber, setPolicyNumber] = useState(() =>
+    initialData && mode === 'edit' ? initialData.policy_number || '' : ''
+  );
+  const [renewalType, setRenewalType] = useState(() =>
+    initialData && mode === 'edit' ? initialData.renewal_type || '' : ''
+  );
+  const [notes, setNotes] = useState(() => (initialData && mode === 'edit' ? initialData.notes || '' : ''));
+  const [supportUrl, setSupportUrl] = useState(() =>
+    initialData && mode === 'edit' ? initialData.support_url || '' : ''
+  );
 
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -101,6 +121,7 @@ function ItemFormModalContent({
         policy_number: policyNumber.trim() || null,
         renewal_type: renewalType.trim() || null,
         notes: notes.trim() || null,
+        support_url: supportUrl.trim() || null,
       });
       onClose();
     } catch (err: unknown) {
@@ -126,7 +147,7 @@ function ItemFormModalContent({
             </button>
           </div>
 
-          {/* Optional OCR Assistant Trigger Button */}
+          {/* OCR Assistant Trigger Button */}
           <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-slate-700">
               <Camera className="h-4 w-4 text-emerald-600" />
@@ -198,7 +219,7 @@ function ItemFormModalContent({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Pfizer, Samsung, Nestlé"
+                  placeholder="e.g. Samsung, Apple, LG, HP, Cipla"
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -230,6 +251,18 @@ function ItemFormModalContent({
                     placeholder="e.g. POL-9920194 or MH-02-..."
                     value={policyNumber}
                     onChange={(e) => setPolicyNumber(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Renewal Type (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Annual, Monthly, Comprehensive, Third-Party"
+                    value={renewalType}
+                    onChange={(e) => setRenewalType(e.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
@@ -324,6 +357,20 @@ function ItemFormModalContent({
               </div>
             )}
 
+            {/* Custom Support / Service URL */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Official Support Link or Service Ticket (Optional)
+              </label>
+              <input
+                type="url"
+                placeholder="https://brand.com/support or service ticket link"
+                value={supportUrl}
+                onChange={(e) => setSupportUrl(e.target.value)}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+
             {/* Batch number for Medicine & Food */}
             {(category === 'medicine' || category === 'first_aid' || category === 'supplement') && (
               <div>
@@ -376,7 +423,6 @@ function ItemFormModalContent({
         </div>
       </div>
 
-      {/* OCR Scanner Modal */}
       <OcrScannerModal
         isOpen={isOcrOpen}
         onClose={() => setIsOcrOpen(false)}
