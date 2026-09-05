@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AuthGuard } from '@/components/auth/AuthGuard';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton';
 import { MetricCard } from '@/components/dashboard/MetricCard';
-import { FilterTabs, FilterView, SortOption } from '@/components/dashboard/FilterTabs';
+import { FilterTabs } from '@/components/dashboard/FilterTabs';
+import { ViewModeSelector } from '@/components/dashboard/ViewModeSelector';
+import { ItemCard } from '@/components/items/ItemCard';
 import ItemFormModal from '@/components/items/ItemFormModal';
 import { ItemDetailModal } from '@/components/items/ItemDetailModal';
 import {
@@ -20,10 +20,16 @@ import {
   VaultItem,
   ItemPayload,
 } from '@/lib/items';
+import {
+  filterAndSortItems,
+  groupItems,
+  StatusFilterType,
+  SortOptionType,
+  GroupModeType,
+} from '@/lib/filterEngine';
 import { calculateItemUrgency } from '@/lib/dateUtils';
 import { generateDueReminders } from '@/lib/reminders';
-import { ITEM_CATEGORIES } from '@/types';
-import { Search, Plus, ShieldCheck, Clock } from 'lucide-react';
+import { Search, Plus, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function DashboardPage() {
@@ -41,9 +47,10 @@ function MainVaultDashboard() {
 
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterView>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [currentSort, setCurrentSort] = useState<SortOption>('urgent');
+  const [statusFilter, setStatusFilter] = useState<StatusFilterType>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<SortOptionType>('urgent_asc');
+  const [groupMode, setGroupMode] = useState<GroupModeType>('none');
 
   // Modals
   const [formModalOpen, setFormModalOpen] = useState(false);
@@ -51,13 +58,12 @@ function MainVaultDashboard() {
   const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
   const [viewingItem, setViewingItem] = useState<VaultItem | null>(null);
 
-  // Load items from Supabase & evaluate upcoming reminders
+  // 1. Fetch User Items
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await fetchUserItems();
       setItems(data);
-      // Silently sync reminders for in-app bell notification
       await generateDueReminders();
     } catch (err) {
       console.error('Failed to load vault items:', err);
@@ -70,11 +76,10 @@ function MainVaultDashboard() {
     const runLoad = async () => {
       await loadData();
     };
-
     void runLoad();
   }, [loadData]);
 
-  // Handle Create & Update
+  // 2. Add / Edit Handler
   const handleFormSubmit = async (payload: ItemPayload) => {
     if (formModalMode === 'add') {
       const created = await createVaultItem(payload);
@@ -88,14 +93,14 @@ function MainVaultDashboard() {
     window.dispatchEvent(new Event('vault-items-updated'));
   };
 
-  // Handle Delete
+  // 3. Delete Handler
   const handleDeleteItem = async (id: string) => {
     await deleteVaultItem(id);
     setItems((prev) => prev.filter((it) => it.id !== id));
     window.dispatchEvent(new Event('vault-items-updated'));
   };
 
-  // Aggregate Metrics & Counts
+  // 4. Metrics calculation across total collection
   const metrics = useMemo(() => {
     let expiredCount = 0;
     let expiringSoonCount = 0;
@@ -104,17 +109,14 @@ function MainVaultDashboard() {
 
     items.forEach((item) => {
       const meta = calculateItemUrgency(item);
-
       if (meta.status === 'expired') {
         expiredCount++;
       } else if (meta.daysRemaining <= 15) {
         expiringSoonCount++;
       }
-
       if (meta.isWarranty && meta.daysRemaining >= 0 && meta.daysRemaining <= 30) {
         warrantyEndingSoonCount++;
       }
-
       if (meta.isRenewal && meta.daysRemaining >= 0 && meta.daysRemaining <= 30) {
         renewalsDueSoonCount++;
       }
@@ -129,59 +131,29 @@ function MainVaultDashboard() {
     };
   }, [items]);
 
-  // Filtered & Sorted Items
+  // 5. Run Filter and Sort Engine
   const processedItems = useMemo(() => {
-    return items
-      .filter((item) => {
-        const meta = calculateItemUrgency(item);
+    return filterAndSortItems(items, {
+      searchQuery,
+      statusFilter,
+      categoryFilter,
+      sortBy,
+    });
+  }, [items, searchQuery, statusFilter, categoryFilter, sortBy]);
 
-        // 1. Text Search Filter
-        const query = searchQuery.toLowerCase().trim();
-        const matchesQuery =
-          !query ||
-          item.name.toLowerCase().includes(query) ||
-          (item.brand && item.brand.toLowerCase().includes(query)) ||
-          (item.provider && item.provider.toLowerCase().includes(query)) ||
-          (item.location_tag && item.location_tag.toLowerCase().includes(query)) ||
-          (item.policy_number && item.policy_number.toLowerCase().includes(query));
+  // 6. Group items for structured display
+  const itemGroups = useMemo(() => {
+    return groupItems(processedItems, groupMode);
+  }, [processedItems, groupMode]);
 
-        if (!matchesQuery) return false;
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 || statusFilter !== 'all' || categoryFilter !== 'all';
 
-        // 2. Category Dropdown Filter
-        if (selectedCategory !== 'all' && item.category !== selectedCategory) {
-          return false;
-        }
-
-        // 3. Status Tabs Filter
-        if (activeFilter === 'expired') return meta.status === 'expired';
-        if (activeFilter === 'expiring') return meta.status === 'expiring';
-        if (activeFilter === 'warranty') return meta.isWarranty;
-        if (activeFilter === 'renewal') return meta.isRenewal;
-
-        return true;
-      })
-      .sort((a, b) => {
-        if (currentSort === 'recent') {
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        }
-
-        if (currentSort === 'name') {
-          return a.name.localeCompare(b.name);
-        }
-
-        // Default 'urgent': prioritize expired (negative days), then expiring soon, then future
-        const metaA = calculateItemUrgency(a);
-        const metaB = calculateItemUrgency(b);
-        return metaA.daysRemaining - metaB.daysRemaining;
-      });
-  }, [items, searchQuery, activeFilter, selectedCategory, currentSort]);
-
-  // Recently Added Items (Top 3)
-  const recentlyAdded = useMemo(() => {
-    return [...items]
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      .slice(0, 3);
-  }, [items]);
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setCategoryFilter('all');
+  };
 
   return (
     <div className="space-y-6">
@@ -222,36 +194,36 @@ function MainVaultDashboard() {
           label="Total Items"
           count={metrics.total}
           variant="default"
-          active={activeFilter === 'all'}
-          onClick={() => setActiveFilter('all')}
+          active={statusFilter === 'all'}
+          onClick={() => setStatusFilter('all')}
         />
         <MetricCard
           label="Expired"
           count={metrics.expired}
           variant="danger"
-          active={activeFilter === 'expired'}
-          onClick={() => setActiveFilter('expired')}
+          active={statusFilter === 'expired'}
+          onClick={() => setStatusFilter('expired')}
         />
         <MetricCard
           label="Expiring Soon"
           count={metrics.expiring}
           variant="warning"
-          active={activeFilter === 'expiring'}
-          onClick={() => setActiveFilter('expiring')}
+          active={statusFilter === 'expiring'}
+          onClick={() => setStatusFilter('expiring')}
         />
         <MetricCard
           label="Warranty Ending"
           count={metrics.warrantySoon}
           variant="info"
-          active={activeFilter === 'warranty'}
-          onClick={() => setActiveFilter('warranty')}
+          active={statusFilter === 'warranty'}
+          onClick={() => setStatusFilter('warranty')}
         />
         <MetricCard
           label="Renewals Due"
           count={metrics.renewalsSoon}
           variant="purple"
-          active={activeFilter === 'renewal'}
-          onClick={() => setActiveFilter('renewal')}
+          active={statusFilter === 'renewal'}
+          onClick={() => setStatusFilter('renewal')}
         />
       </div>
 
@@ -259,159 +231,89 @@ function MainVaultDashboard() {
       <div className="relative w-full">
         <Search className="absolute left-3.5 top-2.5 h-4 w-4 text-slate-400" />
         <Input
-          placeholder="Search by item name, brand, location, or policy no..."
+          placeholder="Search by name, brand, location, lot no, policy no, serial no..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-10"
         />
       </div>
 
-      {/* Filter Tabs & Sort Dropdowns */}
+      {/* Multi-Facet Filter Controls */}
       <FilterTabs
-        currentView={activeFilter}
-        onViewChange={setActiveFilter}
-        selectedCategory={selectedCategory}
-        onCategoryChange={setSelectedCategory}
-        currentSort={currentSort}
-        onSortChange={setCurrentSort}
+        currentStatus={statusFilter}
+        onStatusChange={setStatusFilter}
+        selectedCategory={categoryFilter}
+        onCategoryChange={setCategoryFilter}
+        currentSort={sortBy}
+        onSortChange={setSortBy}
+        hasActiveFilters={hasActiveFilters}
+        onClearFilters={handleClearFilters}
       />
 
-      {/* Main Tracked Items Stream */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
+      {/* View Header & Layout Mode Switcher */}
+      <div className="flex items-center justify-between pt-1">
+        <div>
           <h3 className="text-sm font-bold text-slate-800">
-            {activeFilter === 'all'
-              ? 'All Tracked Items'
-              : activeFilter === 'expired'
-              ? 'Expired Items'
-              : activeFilter === 'expiring'
-              ? 'Items Expiring Soon (≤ 15 Days)'
-              : activeFilter === 'warranty'
-              ? 'Warranties & Electronics'
-              : 'Renewals & Official Documents'}{' '}
-            ({processedItems.length})
+            Vault Items ({processedItems.length})
           </h3>
-          <span className="text-xs text-slate-500">
-            {currentSort === 'urgent'
-              ? 'Sorted by nearest deadline'
-              : currentSort === 'recent'
-              ? 'Sorted by newest'
-              : 'Sorted alphabetically'}
-          </span>
+          {hasActiveFilters && (
+            <span className="text-[11px] text-slate-500">Filtered view active</span>
+          )}
         </div>
 
-        {isLoading ? (
-          <LoadingSkeleton count={3} />
-        ) : processedItems.length === 0 ? (
-          <EmptyState
-            title="No items found in this view"
-            description={
-              searchQuery
-                ? `No items matched your search "${searchQuery}".`
-                : 'No records matching the selected status or category.'
-            }
-            actionLabel="Add New Item"
-            onAction={() => {
-              setEditingItem(null);
-              setFormModalMode('add');
-              setFormModalOpen(true);
-            }}
-          />
-        ) : (
-          processedItems.map((item) => {
-            const meta = calculateItemUrgency(item);
-            const catMeta = ITEM_CATEGORIES.find((c) => c.id === item.category);
-
-            return (
-              <Card
-                key={item.id}
-                onClick={() => setViewingItem(item)}
-                className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 cursor-pointer hover:border-slate-300 hover:shadow-xs transition-all"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-slate-900">
-                      {item.name}
-                    </span>
-                    <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                      {catMeta?.label || item.category}
-                    </span>
-                    <Badge status={meta.status} />
-                  </div>
-
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                    <span>
-                      {meta.dateLabel}: <strong className="text-slate-800">{meta.targetDate || 'None'}</strong>
-                    </span>
-                    {item.brand && (
-                      <span>
-                        Brand: <strong className="text-slate-700">{item.brand}</strong>
-                      </span>
-                    )}
-                    {item.location_tag && (
-                      <span>
-                        Location: <em>{item.location_tag}</em>
-                      </span>
-                    )}
-                    {item.policy_number && (
-                      <span>
-                        Ref No: <strong className="font-mono text-slate-700">{item.policy_number}</strong>
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between md:justify-end gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                  <div className="text-right">
-                    <span
-                      className={`text-xs font-bold block ${
-                        meta.status === 'expired'
-                          ? 'text-rose-600'
-                          : meta.status === 'expiring'
-                          ? 'text-amber-600'
-                          : 'text-emerald-700'
-                      }`}
-                    >
-                      {meta.urgencyText}
-                    </span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setViewingItem(item);
-                    }}
-                  >
-                    View
-                  </Button>
-                </div>
-              </Card>
-            );
-          })
-        )}
+        <ViewModeSelector currentMode={groupMode} onChange={setGroupMode} />
       </div>
 
-      {/* Recently Added Drawer */}
-      {recentlyAdded.length > 0 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-            <Clock className="h-4 w-4 text-emerald-600" />
-            <span>Recently Added to Vault</span>
-          </div>
+      {/* Items Stream / Grouped Lists */}
+      {isLoading ? (
+        <LoadingSkeleton count={3} />
+      ) : processedItems.length === 0 ? (
+        <EmptyState
+          title="No items found"
+          description={
+            hasActiveFilters
+              ? 'No records match your active search, category, or status criteria.'
+              : 'Your vault is clear. Add your first item to start tracking deadlines.'
+          }
+          actionLabel={hasActiveFilters ? 'Clear Filters' : 'Add Item'}
+          onAction={
+            hasActiveFilters
+              ? handleClearFilters
+              : () => {
+                  setEditingItem(null);
+                  setFormModalMode('add');
+                  setFormModalOpen(true);
+                }
+          }
+        />
+      ) : (
+        <div className="space-y-6">
+          {itemGroups.map((group) => (
+            <div key={group.id} className="space-y-2.5">
+              {/* Group Header (if grouped) */}
+              {groupMode !== 'none' && (
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    {group.title}
+                  </span>
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
+                    {group.count}
+                  </span>
+                </div>
+              )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-            {recentlyAdded.map((rec) => (
-              <div
-                key={rec.id}
-                onClick={() => setViewingItem(rec)}
-                className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-100/60 cursor-pointer transition-colors"
-              >
-                <span className="font-semibold text-slate-800 block truncate">{rec.name}</span>
-                <span className="text-[11px] text-slate-500 capitalize">{rec.category}</span>
+              {/* Items in this group */}
+              <div className="space-y-2.5">
+                {group.items.map((proc) => (
+                  <ItemCard
+                    key={proc.item.id}
+                    processed={proc}
+                    onView={() => setViewingItem(proc.item)}
+                  />
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       )}
 
