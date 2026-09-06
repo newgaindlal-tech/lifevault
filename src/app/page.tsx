@@ -120,7 +120,7 @@ export default function DashboardPage() {
   const [bestBeforeMonths, setBestBeforeMonths] = useState<string>('6');
   const [expiryDate, setExpiryDate] = useState('');
 
-  // 1. Initial Load: Vault Items + Live Verified Brands Support Directory
+  // 1. Initial Load
   useEffect(() => {
     let cancelled = false;
 
@@ -175,7 +175,7 @@ export default function DashboardPage() {
     };
   }, [user, supabase]);
 
-  // 2. Safe reload trigger after mutations
+  // 2. Safe reload trigger
   const refreshItems = useCallback(async () => {
     if (!user) return;
     try {
@@ -530,157 +530,160 @@ export default function DashboardPage() {
   }, [items, searchQuery, selectedCategory, statusTab, sortBy]);
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto px-1 sm:px-0 pb-16">
+      {/* Top Banner (Mobile Compact + Clean) */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
         <div>
-          <div className="flex items-center space-x-2 mb-1">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">LifeVault Dashboard</h1>
-            <span className="bg-emerald-50 text-emerald-700 text-[11px] font-semibold px-2 py-0.5 rounded-md border border-emerald-200/60 flex items-center gap-1">
-              <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" /> RLS Protected
+          <div className="flex items-center justify-between sm:justify-start gap-2 mb-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">LifeVault Dashboard</h1>
+            <span className="bg-emerald-50 text-emerald-700 text-[10px] sm:text-[11px] font-semibold px-2 py-0.5 rounded-md border border-emerald-200/60 flex items-center gap-1">
+              <BadgeCheck className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" /> RLS Protected
             </span>
           </div>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 line-clamp-2 sm:line-clamp-none">
             Track real-time expiry dates, manufacturing lifespans, official customer care, and WhatsApp channels.
           </p>
         </div>
 
         <button
           onClick={handleOpenAdd}
-          className="inline-flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm active:scale-[0.98]"
+          className="w-full sm:w-auto inline-flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm active:scale-[0.98]"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
           <span>Add New Product</span>
         </button>
       </div>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+      {/* Metrics Grid: 2x2 Clean Grid on Mobile */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">Total Stored</span>
-            <Package className="h-4 w-4 text-slate-400" aria-hidden="true" />
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Total</span>
+            <Package className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-400" aria-hidden="true" />
           </div>
-          <p className="text-2xl font-bold text-slate-900">{metrics.total}</p>
+          <p className="text-xl sm:text-2xl font-bold text-slate-900">{metrics.total}</p>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-amber-600 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">Expiring Soon</span>
-            <Clock className="h-4 w-4 text-amber-500" aria-hidden="true" />
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Soon</span>
+            <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-500" aria-hidden="true" />
           </div>
-          <p className="text-2xl font-bold text-slate-900">{metrics.expiring}</p>
+          <p className="text-xl sm:text-2xl font-bold text-slate-900">{metrics.expiring}</p>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-red-600 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">Expired</span>
-            <AlertTriangle className="h-4 w-4 text-red-500" aria-hidden="true" />
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Expired</span>
+            <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" aria-hidden="true" />
           </div>
-          <p className="text-2xl font-bold text-slate-900">{metrics.expired}</p>
+          <p className="text-xl sm:text-2xl font-bold text-slate-900">{metrics.expired}</p>
         </div>
 
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 sm:p-5 shadow-xs">
           <div className="flex items-center justify-between text-emerald-600 mb-1">
-            <span className="text-xs font-semibold uppercase tracking-wider">Active & Safe</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider">Safe</span>
+            <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-500" aria-hidden="true" />
           </div>
-          <p className="text-2xl font-bold text-slate-900">{metrics.valid}</p>
+          <p className="text-xl sm:text-2xl font-bold text-slate-900">{metrics.valid}</p>
         </div>
       </div>
 
-      {/* Controls: Search, Type Filters, Custom Sort */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" aria-hidden="true" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search product name, brand, or tag..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
-            />
+      {/* Controls: Search, Responsive Filters & Custom Sort */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-3 sm:p-4 shadow-sm space-y-3">
+        {/* Search Bar */}
+        <div className="relative w-full">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" aria-hidden="true" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search product name, brand, or tag..."
+            className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
+          />
+        </div>
+
+        {/* Status Pills & Sort Bar (Mobile Responsive Stack) */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          {/* Status Tabs (Segmented control) */}
+          <div className="grid grid-cols-4 p-1 bg-slate-100/90 rounded-xl gap-0.5">
+            {(['all', 'expiring', 'expired', 'valid'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setStatusTab(tab)}
+                className={`text-[11px] sm:text-xs font-semibold py-1.5 rounded-lg capitalize text-center transition-all ${
+                  statusTab === tab
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {tab === 'all' ? 'All' : tab}
+              </button>
+            ))}
           </div>
 
-          <div className="flex items-center justify-between w-full md:w-auto gap-2">
-            <div className="flex p-1 bg-slate-100 rounded-xl space-x-1">
-              {(['all', 'expiring', 'expired', 'valid'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setStatusTab(tab)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg capitalize transition-colors ${
-                    statusTab === tab
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {tab === 'all' ? 'All' : tab}
-                </button>
-              ))}
-            </div>
+          {/* Sort Dropdown */}
+          <div className="relative w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => setIsSortOpen(!isSortOpen)}
+              className="w-full sm:w-auto inline-flex items-center justify-between gap-2 px-3 py-2 sm:py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl transition-colors min-w-42.5"
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                <span className="truncate">{sortLabels[sortBy]}</span>
+              </div>
+              <span className={`transition-transform duration-200 text-slate-400 text-[10px] shrink-0 ${isSortOpen ? 'rotate-180' : ''}`}>
+                ▼
+              </span>
+            </button>
 
-            <div className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsSortOpen(!isSortOpen)}
-                className="inline-flex items-center justify-between gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl transition-colors min-w-41.25"
-              >
-                <div className="flex items-center gap-1.5 truncate">
-                  <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
-                  <span>{sortLabels[sortBy]}</span>
+            {isSortOpen && (
+              <>
+                <div 
+                  className="fixed inset-0 z-30" 
+                  onClick={() => setIsSortOpen(false)} 
+                />
+                <div className="absolute right-0 mt-1.5 w-full sm:w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-40 p-1 divide-y divide-slate-50">
+                  {(Object.keys(sortLabels) as SortOption[]).map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => {
+                        setSortBy(option);
+                        setIsSortOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs rounded-lg transition-colors flex items-center justify-between ${
+                        sortBy === option
+                          ? 'bg-emerald-50 text-emerald-700 font-semibold'
+                          : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>{sortLabels[option]}</span>
+                      {sortBy === option && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 shrink-0" />
+                      )}
+                    </button>
+                  ))}
                 </div>
-                <span className={`transition-transform duration-200 text-slate-400 text-[10px] ${isSortOpen ? 'rotate-180' : ''}`}>
-                  ▼
-                </span>
-              </button>
-
-              {isSortOpen && (
-                <>
-                  <div 
-                    className="fixed inset-0 z-30" 
-                    onClick={() => setIsSortOpen(false)} 
-                  />
-                  <div className="absolute right-0 mt-1.5 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-40 p-1 divide-y divide-slate-50">
-                    {(Object.keys(sortLabels) as SortOption[]).map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        onClick={() => {
-                          setSortBy(option);
-                          setIsSortOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs rounded-lg transition-colors flex items-center justify-between ${
-                          sortBy === option
-                            ? 'bg-emerald-50 text-emerald-700 font-semibold'
-                            : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span>{sortLabels[option]}</span>
-                        {sortBy === option && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 shrink-0" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 border-t border-slate-100 pt-3">
-          <span className="text-[11px] font-semibold text-slate-400 flex items-center mr-1">
-            <Filter className="h-3 w-3 mr-1" aria-hidden="true" /> Category:
+        {/* Categories Bar: Horizontal Smooth Scroll without Ugly Scrollbars */}
+        <div className="pt-2 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 mr-1 flex items-center">
+            <Filter className="h-3 w-3 mr-1" aria-hidden="true" /> Cat:
           </span>
           {CATEGORIES.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`text-xs px-3 py-1 rounded-lg shrink-0 font-medium transition-colors ${
+              className={`text-xs px-3 py-1.5 rounded-xl shrink-0 font-medium transition-all active:scale-95 ${
                 selectedCategory === cat
-                  ? 'bg-emerald-600 text-white font-semibold shadow-sm'
-                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
+                  ? 'bg-emerald-600 text-white font-semibold shadow-xs'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/70'
               }`}
             >
               {cat}
@@ -689,7 +692,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Items List */}
+      {/* Items List (Mobile-Optimized Clean Card Layout) */}
       <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
         {loading ? (
           <div className="p-12 text-center text-slate-500">
@@ -697,7 +700,7 @@ export default function DashboardPage() {
             <p className="text-xs font-medium">Fetching records...</p>
           </div>
         ) : processedItems.length === 0 ? (
-          <div className="p-12 text-center text-slate-500">
+          <div className="p-10 text-center text-slate-500">
             <Package className="h-10 w-10 mx-auto mb-3 text-slate-300" aria-hidden="true" />
             <p className="text-sm font-semibold text-slate-700">No records found</p>
             <p className="text-xs text-slate-400 mt-1">
@@ -716,127 +719,125 @@ export default function DashboardPage() {
               return (
                 <div
                   key={item.id}
-                  className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/60 transition-colors"
+                  className="p-3.5 sm:p-5 flex flex-col gap-3 hover:bg-slate-50/60 transition-colors"
                 >
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-sm text-slate-900">{item.name}</span>
+                  {/* Card Header: Name + Badges + Status Tag & Edit Button */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-bold text-sm sm:text-base text-slate-900">{item.name}</span>
 
-                      {item.brand && (
-                        <span className="inline-flex items-center text-[11px] font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
-                          {item.brand}
-                          {brandMeta && (
-                            <BadgeCheck 
-                              className="h-3 w-3 ml-1 text-blue-600" 
-                              role="img" 
-                              aria-label="Verified Brand" 
-                            />
-                          )}
+                        {item.brand && (
+                          <span className="inline-flex items-center text-[10px] sm:text-[11px] font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                            {item.brand}
+                            {brandMeta && (
+                              <BadgeCheck 
+                                className="h-3 w-3 ml-1 text-blue-600" 
+                                role="img" 
+                                aria-label="Verified Brand" 
+                              />
+                            )}
+                          </span>
+                        )}
+
+                        <span className="inline-flex items-center text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200/60">
+                          <Tag className="h-2.5 w-2.5 mr-1 text-slate-400" aria-hidden="true" />
+                          {item.category}
                         </span>
-                      )}
+                      </div>
 
-                      <span className="inline-flex items-center text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200/60">
-                        <Tag className="h-3 w-3 mr-1 text-slate-400" aria-hidden="true" />
-                        {item.category}
-                      </span>
+                      {item.notes && (
+                        <p className="text-xs text-slate-500 line-clamp-1">{item.notes}</p>
+                      )}
                     </div>
 
-                    {item.notes && (
-                      <p className="text-xs text-slate-500 max-w-xl line-clamp-1">{item.notes}</p>
-                    )}
-
-                    {/* Expiry Dates & Manufacturing Dates */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-0.5">
-                      {item.mfg_date && (
-                        <span className="flex items-center text-slate-500">
-                          <CalendarDays className="h-3.5 w-3.5 mr-1 text-slate-400" aria-hidden="true" />
-                          Mfg: <span className="ml-1 font-medium text-slate-700">{new Date(item.mfg_date).toLocaleDateString()}</span>
-                          {item.lifespan_months && (
-                            <span className="ml-1 text-[10px] bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 text-slate-600">
-                              (Use within {item.lifespan_months} mos)
-                            </span>
-                          )}
-                          <span className="mx-2 text-slate-300">•</span>
-                        </span>
-                      )}
-
-                      <span className="flex items-center">
-                        <Calendar className="h-3.5 w-3.5 mr-1 text-slate-400" aria-hidden="true" />
-                        Expiry: <span className="ml-1 font-medium text-slate-800">{new Date(item.expiry_date).toLocaleDateString()}</span>
-                        <span className="mx-1.5 text-slate-300">•</span>
-                        <span className={exp.textColor}>({exp.detailText})</span>
+                    {/* Top Right Action: Status Pill + Edit Button */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`text-[10px] sm:text-xs font-semibold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full border ${exp.badgeColor}`}>
+                        {exp.tag}
                       </span>
-                    </div>
-
-                    {/* Dedicated Customer Care Channels Bar */}
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      {/* Nearby Repair (Google Maps) */}
-                      <a
-                        href={`https://www.google.com/maps/search/${encodeURIComponent(searchTarget)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center text-slate-600 hover:text-slate-900 bg-slate-100/90 hover:bg-slate-200/80 px-2 py-1 rounded-lg font-medium text-[11px] border border-slate-200/70 transition-colors"
+                      <button
+                        onClick={() => handleOpenEdit(item)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-all active:scale-95"
+                        title="Edit Item"
                       >
-                        <MapPin className="h-3 w-3 mr-1 text-emerald-600" aria-hidden="true" />
-                        Nearby Centre
-                        <ExternalLink className="h-2.5 w-2.5 ml-1 text-slate-400" aria-hidden="true" />
-                      </a>
-
-                      {/* Official Support Website from Admin */}
-                      {brandMeta?.support_url && (
-                        <a
-                          href={brandMeta.support_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center text-blue-700 hover:text-blue-800 bg-blue-50/80 hover:bg-blue-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-blue-200/70 transition-colors"
-                        >
-                          <Globe className="h-3 w-3 mr-1 text-blue-600" aria-hidden="true" />
-                          Official Support
-                          <ExternalLink className="h-2.5 w-2.5 ml-1 text-blue-400" aria-hidden="true" />
-                        </a>
-                      )}
-
-                      {/* Customer Care Call Helpline from Admin */}
-                      {brandMeta?.customer_care_phone && (
-                        <a
-                          href={`tel:${brandMeta.customer_care_phone}`}
-                          className="inline-flex items-center text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-slate-200/80 transition-colors"
-                        >
-                          <Phone className="h-3 w-3 mr-1 text-slate-500" aria-hidden="true" />
-                          Call: {brandMeta.customer_care_phone}
-                        </a>
-                      )}
-
-                      {/* Official WhatsApp Support from Admin */}
-                      {brandMeta?.whatsapp_number && (
-                        <a
-                          href={`https://wa.me/${brandMeta.whatsapp_number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-                            `Hello, I need customer support for my ${item.name}`
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-emerald-200 transition-colors"
-                        >
-                          <MessageCircle className="h-3 w-3 mr-1 text-emerald-600" aria-hidden="true" />
-                          WhatsApp Care
-                        </a>
-                      )}
+                        <Edit3 className="h-3 w-3 text-slate-500" />
+                        <span className="text-[11px]">Edit</span>
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-3 self-end md:self-center shrink-0">
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${exp.badgeColor}`}>
-                      {exp.tag}
-                    </span>
+                  {/* Dates Row (Mfg Date + Expiry Date) */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 bg-slate-50/70 p-2 rounded-xl border border-slate-100">
+                    {item.mfg_date && (
+                      <span className="flex items-center text-slate-600">
+                        <CalendarDays className="h-3.5 w-3.5 mr-1 text-slate-400" aria-hidden="true" />
+                        Mfg: <span className="ml-1 font-medium text-slate-800">{new Date(item.mfg_date).toLocaleDateString()}</span>
+                        {item.lifespan_months && (
+                          <span className="ml-1 text-[10px] bg-white px-1.5 py-0.2 rounded border border-slate-200 text-slate-600">
+                            ({item.lifespan_months} mos)
+                          </span>
+                        )}
+                        <span className="mx-2 text-slate-300">•</span>
+                      </span>
+                    )}
 
-                    <button
-                      onClick={() => handleOpenEdit(item)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all shadow-xs active:scale-95"
-                      title="Edit Item"
+                    <span className="flex items-center">
+                      <Calendar className="h-3.5 w-3.5 mr-1 text-slate-400" aria-hidden="true" />
+                      Expiry: <span className="ml-1 font-medium text-slate-800">{new Date(item.expiry_date).toLocaleDateString()}</span>
+                      <span className="mx-1.5 text-slate-300">•</span>
+                      <span className={exp.textColor}>({exp.detailText})</span>
+                    </span>
+                  </div>
+
+                  {/* Customer Care Channels Bar: Scrollable on Small Mobile */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                    <a
+                      href={`https://www.google.com/maps/search/${encodeURIComponent(searchTarget)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center shrink-0 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 px-2 py-1 rounded-lg font-medium text-[11px] border border-slate-200/70 transition-colors"
                     >
-                      <Edit3 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
-                      <span>Edit</span>
-                    </button>
+                      <MapPin className="h-3 w-3 mr-1 text-emerald-600" aria-hidden="true" />
+                      Nearby Centre
+                      <ExternalLink className="h-2.5 w-2.5 ml-1 text-slate-400" aria-hidden="true" />
+                    </a>
+
+                    {brandMeta?.support_url && (
+                      <a
+                        href={brandMeta.support_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center shrink-0 text-blue-700 hover:text-blue-800 bg-blue-50/80 hover:bg-blue-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-blue-200/70 transition-colors"
+                      >
+                        <Globe className="h-3 w-3 mr-1 text-blue-600" aria-hidden="true" />
+                        Official Support
+                      </a>
+                    )}
+
+                    {brandMeta?.customer_care_phone && (
+                      <a
+                        href={`tel:${brandMeta.customer_care_phone}`}
+                        className="inline-flex items-center shrink-0 text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-slate-200/80 transition-colors"
+                      >
+                        <Phone className="h-3 w-3 mr-1 text-slate-500" aria-hidden="true" />
+                        Call
+                      </a>
+                    )}
+
+                    {brandMeta?.whatsapp_number && (
+                      <a
+                        href={`https://wa.me/${brandMeta.whatsapp_number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                          `Hello, I need customer support for my ${item.name}`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center shrink-0 text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-emerald-200 transition-colors"
+                      >
+                        <MessageCircle className="h-3 w-3 mr-1 text-emerald-600" aria-hidden="true" />
+                        WhatsApp
+                      </a>
+                    )}
                   </div>
                 </div>
               );
@@ -845,10 +846,10 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Add / Edit Modal */}
+      {/* Add / Edit Modal (Mobile Bottom-Sheet Style & Scrollable) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end sm:items-center justify-center sm:p-4">
+          <div className="bg-white rounded-t-3xl sm:rounded-2xl border border-slate-200 max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
@@ -860,7 +861,7 @@ export default function DashboardPage() {
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-xs font-semibold"
+                className="text-slate-400 hover:text-slate-600 text-xs font-semibold p-1"
               >
                 Close
               </button>
@@ -897,7 +898,7 @@ export default function DashboardPage() {
             )}
 
             <form onSubmit={handleSaveItem} className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
                     Product / Item Name *
@@ -947,39 +948,39 @@ export default function DashboardPage() {
 
               {/* Manufacturing & Smart Expiry Mode Switcher */}
               <div className="bg-slate-50/90 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <Calculator className="h-3.5 w-3.5 text-emerald-600" />
                     Expiry Determination
                   </span>
                   
-                  <div className="flex items-center p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-semibold">
+                  <div className="grid grid-cols-2 p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-semibold">
                     <button
                       type="button"
                       onClick={() => setExpiryMode('direct')}
-                      className={`px-2.5 py-1 rounded-md transition-all ${
+                      className={`px-2 py-1 rounded-md text-center transition-all ${
                         expiryMode === 'direct'
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
-                      Exact Expiry Date
+                      Exact Expiry
                     </button>
                     <button
                       type="button"
                       onClick={() => setExpiryMode('best_before')}
-                      className={`px-2.5 py-1 rounded-md transition-all ${
+                      className={`px-2 py-1 rounded-md text-center transition-all ${
                         expiryMode === 'best_before'
                           ? 'bg-white text-slate-900 shadow-xs'
                           : 'text-slate-500 hover:text-slate-900'
                       }`}
                     >
-                      Best Before (Mfg + X mos)
+                      Best Before
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 mb-1">
                       Manufacturing Date <span className="text-slate-400 font-normal">(Optional)</span>
@@ -988,7 +989,7 @@ export default function DashboardPage() {
                       type="date"
                       value={mfgDate || ''}
                       onChange={(e) => setMfgDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
 
@@ -1000,7 +1001,7 @@ export default function DashboardPage() {
                       <select
                         value={bestBeforeMonths}
                         onChange={(e) => setBestBeforeMonths(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
                       >
                         <option value="1">1 Month</option>
                         <option value="2">2 Months</option>
@@ -1023,7 +1024,7 @@ export default function DashboardPage() {
                         required
                         value={expiryDate || ''}
                         onChange={(e) => setExpiryDate(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                        className="w-full px-2.5 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
                       />
                     </div>
                   )}
@@ -1031,7 +1032,7 @@ export default function DashboardPage() {
 
                 {expiryMode === 'best_before' && (
                   <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center justify-between text-xs">
-                    <span className="text-emerald-800 font-medium">Calculated Expiry Date:</span>
+                    <span className="text-emerald-800 font-medium text-[11px]">Calculated Date:</span>
                     <span className="font-bold text-emerald-900 bg-white px-2 py-0.5 rounded border border-emerald-200 shadow-2xs">
                       {calculatedExpiryDate ? new Date(calculatedExpiryDate).toLocaleDateString() : 'Select Mfg Date'}
                     </span>
@@ -1052,7 +1053,7 @@ export default function DashboardPage() {
                 />
               </div>
 
-              {/* UI/UX Feature: Official Brand Support Hub inside Modal */}
+              {/* Official Brand Support Hub inside Modal */}
               {(() => {
                 const currentBrandMeta = brand.trim() ? verifiedBrandsMap[brand.trim().toLowerCase()] : null;
                 if (!currentBrandMeta || (!currentBrandMeta.customer_care_phone && !currentBrandMeta.whatsapp_number && !currentBrandMeta.support_url)) {
@@ -1065,7 +1066,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-1.5">
                         <BadgeCheck className="h-4 w-4 text-blue-600" />
                         <span className="text-xs font-bold text-slate-900">
-                          {currentBrandMeta.name || brand} Official Support Channels
+                          {currentBrandMeta.name || brand} Official Support
                         </span>
                       </div>
                       <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
@@ -1074,7 +1075,6 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                      {/* WhatsApp Support */}
                       {currentBrandMeta.whatsapp_number && (
                         <a
                           href={`https://wa.me/${currentBrandMeta.whatsapp_number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
@@ -1089,7 +1089,6 @@ export default function DashboardPage() {
                         </a>
                       )}
 
-                      {/* Phone / Toll-free */}
                       {currentBrandMeta.customer_care_phone && (
                         <a
                           href={`tel:${currentBrandMeta.customer_care_phone}`}
@@ -1100,7 +1099,6 @@ export default function DashboardPage() {
                         </a>
                       )}
 
-                      {/* Official Support Website */}
                       {currentBrandMeta.support_url && (
                         <a
                           href={currentBrandMeta.support_url}
@@ -1118,9 +1116,9 @@ export default function DashboardPage() {
                 );
               })()}
 
-              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                 {editingItemId ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     {(() => {
                       const action = getCategoryAction(category);
                       return (
@@ -1128,11 +1126,10 @@ export default function DashboardPage() {
                           type="button"
                           onClick={handleSmartDismiss}
                           disabled={isDeleting || submitting}
-                          className={`inline-flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${action.bgColor}`}
-                          title={action.label}
+                          className={`inline-flex items-center gap-1 px-2.5 py-2 border rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${action.bgColor}`}
                         >
                           {action.icon}
-                          <span>{action.label}</span>
+                          <span className="truncate max-w-20 sm:max-w-none">{action.label}</span>
                         </button>
                       );
                     })()}
@@ -1141,10 +1138,9 @@ export default function DashboardPage() {
                       type="button"
                       onClick={handleDeleteFromModal}
                       disabled={isDeleting || submitting}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
-                      title="Delete record permanently"
+                      className="inline-flex items-center gap-1 px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
                     >
-                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Trash2 className="h-3.5 w-3.5" />
                       <span>Delete</span>
                     </button>
                   </div>
@@ -1156,7 +1152,7 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                    className="px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
                   >
                     Cancel
                   </button>
@@ -1166,9 +1162,9 @@ export default function DashboardPage() {
                     className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm disabled:opacity-50"
                   >
                     {submitting ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <span>{editingItemId ? 'Update Record' : 'Save Record'}</span>
+                      <span>{editingItemId ? 'Update' : 'Save'}</span>
                     )}
                   </button>
                 </div>
