@@ -2,7 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ShieldCheck, LogOut } from 'lucide-react';
+import { ShieldCheck, LogOut, SlidersHorizontal } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { NotificationCenter } from '@/components/reminders/NotificationCenter';
 
@@ -22,7 +22,7 @@ export const Header: React.FC = () => {
       {/* Brand logo & name */}
       <Link href="/" className="flex items-center gap-2.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm">
-          <ShieldCheck className="h-5 w-5" />
+          <ShieldCheck className="h-5 w-5" aria-hidden="true" />
         </div>
         <div>
           <span className="text-base font-bold tracking-tight text-slate-900 block leading-tight">
@@ -34,10 +34,20 @@ export const Header: React.FC = () => {
         </div>
       </Link>
 
-      {/* Controls & Notifications */}
+      {/* Controls, Admin Link & Notifications */}
       <div className="flex items-center gap-2 sm:gap-3">
         {user ? (
           <>
+            {/* Admin Control Panel Button */}
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200/80 bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors text-xs font-medium"
+              title="Admin Control Panel"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+              <span className="hidden sm:inline">Admin</span>
+            </Link>
+
             {/* Live Free Notification Center */}
             <NotificationCenter />
 
@@ -51,9 +61,10 @@ export const Header: React.FC = () => {
               <button
                 onClick={() => signOut()}
                 title="Sign Out"
+                aria-label="Sign Out"
                 className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-colors"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           </>

@@ -1,34 +1,35 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import { ShieldCheck } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { Shield, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export default function SignUpPage() {
   const router = useRouter();
+  const supabase = createClient();
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     if (!fullName.trim()) {
       setErrorMessage('Please enter your full name.');
       return;
     }
-    if (!email.trim() || !email.includes('@')) {
-      setErrorMessage('Please provide a valid email address.');
-      return;
-    }
-    if (password.length < 6) {
-      setErrorMessage('Password must be at least 6 characters long.');
+    if (password.length < 8) {
+      setErrorMessage('Password must be at least 8 characters long.');
       return;
     }
     if (password !== confirmPassword) {
@@ -36,15 +37,18 @@ export default function SignUpPage() {
       return;
     }
 
-    setIsSubmitting(true);
+    setLoading(true);
+
     try {
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password,
+        email,
+        password,
         options: {
           data: {
             full_name: fullName.trim(),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
@@ -53,116 +57,120 @@ export default function SignUpPage() {
         return;
       }
 
-      if (data?.session) {
-        router.push('/');
+      if (data.user && data.session === null) {
+        setSuccessMessage(
+          'Verification link sent! Please check your email to complete registration.'
+        );
       } else {
-        setErrorMessage('Account created successfully! Redirecting to login...');
-        setTimeout(() => router.push('/auth/login'), 1500);
+        router.push('/');
+        router.refresh();
       }
-    } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Registration failed.');
+    } catch {
+      setErrorMessage('An unexpected error occurred. Please try again.');
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="w-full max-w-md mx-auto py-10 px-4">
-      <div className="text-center mb-6">
-        <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md mb-3">
-          <ShieldCheck className="h-6 w-6" />
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          Create Your LifeVault
-        </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Never miss an expiry date or lost warranty again
-        </p>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-        <form onSubmit={handleSignUp} className="space-y-4">
-          {errorMessage && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg">
-              {errorMessage}
-            </div>
-          )}
-
+    <div className="min-h-[calc(100vh-4rem)] bg-slate-50 text-slate-800 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white border border-slate-200/80 rounded-2xl p-8 shadow-sm hover:shadow-md transition-shadow">
+        <div className="flex items-center space-x-3 mb-6">
+          <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center border border-emerald-200">
+            <Shield className="h-5 w-5" />
+          </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Full Name
-            </label>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">Create LifeVault Account</h1>
+            <p className="text-xs text-slate-500">Secure, encrypted personal document vault</p>
+          </div>
+        </div>
+
+        {errorMessage && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-2 text-red-600 text-sm">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center space-x-2 text-emerald-700 text-sm">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSignUp} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
             <input
               type="text"
-              placeholder="e.g. Alex Morgan"
+              required
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              required
+              placeholder="Enter Your Name"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Email Address
-            </label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
             <input
               type="email"
-              placeholder="name@example.com"
+              required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              required
+              placeholder="enter your email"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              placeholder="At least 6 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              required
-            />
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Confirm Password
-            </label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Confirm Password</label>
             <input
               type="password"
-              placeholder="Repeat your password"
+              required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              required
+              placeholder="••••••••"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
             />
           </div>
 
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition-colors disabled:opacity-50"
+            disabled={loading}
+            className="w-full mt-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl text-sm flex items-center justify-center space-x-2 transition-all shadow-sm active:scale-[0.99] disabled:opacity-50"
           >
-            {isSubmitting ? 'Creating Account...' : 'Create Account'}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>Sign Up</span>}
           </button>
         </form>
 
-        <div className="mt-6 border-t border-slate-100 pt-4 text-center">
-          <p className="text-xs text-slate-500">
-            Already have an account?{' '}
-            <Link
-              href="/auth/login"
-              className="font-semibold text-emerald-600 hover:text-emerald-700 underline"
-            >
-              Sign In
-            </Link>
-          </p>
+        <div className="mt-6 text-center text-xs text-slate-500">
+          Already have an account?{' '}
+          <Link href="/auth/login" className="text-emerald-600 hover:text-emerald-700 hover:underline font-semibold">
+            Sign In
+          </Link>
         </div>
       </div>
     </div>

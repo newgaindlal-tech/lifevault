@@ -1,8 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import { AuthChangeEvent, User, Session } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/client';
 
 interface AuthContextType {
   user: User | null;
@@ -18,47 +19,42 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 });
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const supabase = createClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    async function getInitialSession() {
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-    });
+    }
 
-    // 2. Listen for auth changes and wipe state on switch
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      setLoading(false);
+    getInitialSession();
 
-      if (event === 'SIGNED_OUT') {
-        // Broadcast event to clear cached memory stores
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('vault-user-signed-out'));
-        }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, currentSession: Session | null) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        setLoading(false);
       }
-    });
+    );
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [supabase]);
 
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error('Error during signOut:', err);
-    } finally {
-      setSession(null);
-      setUser(null);
-    }
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+    router.push('/auth/login');
+    router.refresh();
   };
 
   return (
@@ -66,6 +62,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
 export const useAuth = () => useContext(AuthContext);

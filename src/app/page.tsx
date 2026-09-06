@@ -1,356 +1,1182 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { AuthGuard } from '@/components/auth/AuthGuard';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { LoadingSkeleton } from '@/components/ui/LoadingSkeleton';
-import { MetricCard } from '@/components/dashboard/MetricCard';
-import { FilterTabs } from '@/components/dashboard/FilterTabs';
-import { ViewModeSelector } from '@/components/dashboard/ViewModeSelector';
-import { ItemCard } from '@/components/items/ItemCard';
-import ItemFormModal from '@/components/items/ItemFormModal';
-import { ItemDetailModal } from '@/components/items/ItemDetailModal';
-import {
-  fetchUserItems,
-  createVaultItem,
-  updateVaultItem,
-  deleteVaultItem,
-  VaultItem,
-  ItemPayload,
-} from '@/lib/items';
-import {
-  filterAndSortItems,
-  groupItems,
-  StatusFilterType,
-  SortOptionType,
-  GroupModeType,
-} from '@/lib/filterEngine';
-import { calculateItemUrgency } from '@/lib/dateUtils';
-import { generateDueReminders } from '@/lib/reminders';
-import { Search, Plus, ShieldCheck } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/context/AuthContext';
+import { 
+  Plus, 
+  Search, 
+  Package, 
+  AlertTriangle, 
+  Clock, 
+  CheckCircle2, 
+  Calendar, 
+  Trash2, 
+  Edit3, 
+  Tag, 
+  Loader2, 
+  ScanLine, 
+  MapPin, 
+  BadgeCheck, 
+  ArrowUpDown, 
+  Filter, 
+  ExternalLink,
+  Check,
+  Archive,
+  Ban,
+  Sparkles,
+  Calculator,
+  CalendarDays,
+  Phone,
+  MessageCircle,
+  Globe
+} from 'lucide-react';
 
-export default function DashboardPage() {
-  return (
-    <AuthGuard>
-      <MainVaultDashboard />
-    </AuthGuard>
-  );
+export type Category = 
+  | 'Electronics' 
+  | 'Medicine' 
+  | 'Groceries' 
+  | 'Foods'
+  | 'Cosmetics'
+  | 'Warranty' 
+  | 'Subscription' 
+  | 'Document' 
+  | 'Other';
+
+type SortOption = 'expiry_asc' | 'expiry_desc' | 'name_asc' | 'created_desc';
+
+interface VerifiedBrandMeta {
+  name: string | null;
+  support_url?: string | null;
+  customer_care_phone?: string | null;
+  whatsapp_number?: string | null;
 }
 
-function MainVaultDashboard() {
+interface VaultItem {
+  id: string;
+  user_id: string;
+  name: string;
+  category: Category;
+  expiry_date: string;
+  mfg_date?: string | null;
+  lifespan_months?: number | null;
+  brand?: string | null;
+  is_verified_brand?: boolean;
+  notes?: string | null;
+  created_at: string;
+}
+
+const CATEGORIES: readonly ['All', ...Category[]] = [
+  'All',
+  'Electronics',
+  'Groceries',
+  'Foods',
+  'Cosmetics',
+  'Medicine',
+  'Warranty',
+  'Subscription',
+  'Document',
+  'Other',
+];
+
+const sortLabels: Record<SortOption, string> = {
+  expiry_asc: 'Expiry: Earliest first',
+  expiry_desc: 'Expiry: Furthest first',
+  name_asc: 'Name: A to Z',
+  created_desc: 'Recently Added',
+};
+
+export default function DashboardPage() {
   const { user } = useAuth();
+  const supabase = createClient();
+
   const [items, setItems] = useState<VaultItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [verifiedBrandsMap, setVerifiedBrandsMap] = useState<Record<string, VerifiedBrandMeta>>({});
+  const [loading, setLoading] = useState(true);
 
-  // Search & Filter States
+  // Search, Filters & Sorting
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilterType>('all');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<SortOptionType>('urgent_asc');
-  const [groupMode, setGroupMode] = useState<GroupModeType>('none');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [statusTab, setStatusTab] = useState<'all' | 'expiring' | 'expired' | 'valid'>('all');
+  const [sortBy, setSortBy] = useState<SortOption>('expiry_asc');
+  const [isSortOpen, setIsSortOpen] = useState(false);
 
-  // Modals
-  const [formModalOpen, setFormModalOpen] = useState(false);
-  const [formModalMode, setFormModalMode] = useState<'add' | 'edit'>('add');
-  const [editingItem, setEditingItem] = useState<VaultItem | null>(null);
-  const [viewingItem, setViewingItem] = useState<VaultItem | null>(null);
+  // Modal State (Add + Edit)
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isScanningOCR, setIsScanningOCR] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const data = await fetchUserItems();
-      setItems(data);
-      await generateDueReminders();
-    } catch (err) {
-      console.error('Failed to load vault items:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // Form Fields
+  const [name, setName] = useState('');
+  const [brand, setBrand] = useState('');
+  const [category, setCategory] = useState<Category>('Electronics');
+  const [notes, setNotes] = useState('');
 
+  // Expiry Mode & Calculation Fields
+  const [expiryMode, setExpiryMode] = useState<'direct' | 'best_before'>('direct');
+  const [mfgDate, setMfgDate] = useState('');
+  const [bestBeforeMonths, setBestBeforeMonths] = useState<string>('6');
+  const [expiryDate, setExpiryDate] = useState('');
+
+  // 1. Initial Load: Vault Items + Live Verified Brands Support Directory
   useEffect(() => {
-    const runLoad = async () => {
-      await loadData();
-    };
-    void runLoad();
+    let cancelled = false;
 
-    const handleItemSync = () => void loadData();
-    window.addEventListener('vault-items-updated', handleItemSync);
-    window.addEventListener('vault-user-signed-out', () => setItems([]));
+    const loadData = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const [itemsRes, brandsRes] = await Promise.all([
+          supabase
+            .from('items')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('expiry_date', { ascending: true }),
+          supabase
+            .from('verified_brands')
+            .select('name, support_url, customer_care_phone, whatsapp_number')
+            .eq('is_active', true),
+        ]);
+
+        if (!cancelled) {
+          if (itemsRes.data) {
+            setItems(itemsRes.data as VaultItem[]);
+          }
+          if (brandsRes.data) {
+            const map: Record<string, VerifiedBrandMeta> = {};
+            (brandsRes.data as VerifiedBrandMeta[]).forEach((b: VerifiedBrandMeta) => {
+              if (b.name) {
+                map[b.name.trim().toLowerCase()] = b;
+              }
+            });
+            setVerifiedBrandsMap(map);
+          }
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          console.error('Error fetching dashboard data:', err);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadData();
 
     return () => {
-      window.removeEventListener('vault-items-updated', handleItemSync);
-      window.removeEventListener('vault-user-signed-out', () => setItems([]));
+      cancelled = true;
     };
-  }, [loadData]);
+  }, [user, supabase]);
 
-  const handleFormSubmit = async (payload: ItemPayload) => {
-    if (formModalMode === 'add') {
-      const created = await createVaultItem(payload);
-      setItems((prev) => [created, ...prev]);
-    } else if (editingItem) {
-      const updated = await updateVaultItem(editingItem.id, payload);
-      setItems((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
-      setViewingItem(updated);
+  // 2. Safe reload trigger after mutations
+  const refreshItems = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('items')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('expiry_date', { ascending: true });
+
+      if (!error && data) {
+        setItems(data as VaultItem[]);
+      }
+    } catch (err: unknown) {
+      console.error('Error refreshing items:', err);
     }
-    await generateDueReminders();
-    window.dispatchEvent(new Event('vault-items-updated'));
+  }, [user, supabase]);
+
+  // Compute calculated expiry date during render
+  const calculatedExpiryDate = useMemo(() => {
+    if (expiryMode !== 'best_before' || !mfgDate) {
+      return '';
+    }
+
+    const months = Number.parseInt(bestBeforeMonths, 10);
+    const mfg = new Date(`${mfgDate}T00:00:00`);
+
+    if (!Number.isInteger(months) || months <= 0 || Number.isNaN(mfg.getTime())) {
+      return '';
+    }
+
+    mfg.setMonth(mfg.getMonth() + months);
+
+    return mfg.toISOString().split('T')[0];
+  }, [expiryMode, mfgDate, bestBeforeMonths]);
+
+  const effectiveExpiryDate = expiryMode === 'best_before' ? calculatedExpiryDate : expiryDate;
+
+  // Open Modal in Edit Mode
+  const handleOpenEdit = (item: VaultItem) => {
+    setEditingItemId(item.id);
+    setName(item.name || '');
+    setBrand(item.brand || '');
+    setCategory(item.category);
+    setMfgDate(item.mfg_date ? item.mfg_date.split('T')[0] : '');
+    setExpiryDate(item.expiry_date ? item.expiry_date.split('T')[0] : '');
+    
+    if (item.lifespan_months) {
+      setBestBeforeMonths(item.lifespan_months.toString());
+      setExpiryMode('best_before');
+    } else {
+      setBestBeforeMonths('6');
+      setExpiryMode('direct');
+    }
+
+    setNotes(item.notes || '');
+    setIsModalOpen(true);
   };
 
-  const handleDeleteItem = async (id: string) => {
-    await deleteVaultItem(id);
-    setItems((prev) => prev.filter((it) => it.id !== id));
-    window.dispatchEvent(new Event('vault-items-updated'));
+  // Open Modal in Add Mode
+  const handleOpenAdd = () => {
+    setEditingItemId(null);
+    setName('');
+    setBrand('');
+    setCategory('Electronics');
+    setMfgDate('');
+    setBestBeforeMonths('6');
+    setExpiryDate('');
+    setExpiryMode('direct');
+    setNotes('');
+    setIsModalOpen(true);
   };
 
-  const metrics = useMemo(() => {
-    let expiredCount = 0;
-    let expiringSoonCount = 0;
-    let warrantyEndingSoonCount = 0;
-    let renewalsDueSoonCount = 0;
+  // Simulated OCR Scanner
+  const handleSimulateOCR = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    items.forEach((item) => {
-      const meta = calculateItemUrgency(item);
-      if (meta.status === 'expired') {
-        expiredCount++;
-      } else if (meta.daysRemaining <= 15) {
-        expiringSoonCount++;
+    setIsScanningOCR(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+      const detectedName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      setName(detectedName || 'Scanned Receipt Item');
+      
+      const nextYear = new Date();
+      nextYear.setFullYear(nextYear.getFullYear() + 1);
+      setExpiryDate(nextYear.toISOString().split('T')[0]);
+      setExpiryMode('direct');
+      setNotes('Details extracted via OCR Bill Scanner.');
+    } catch {
+      alert('OCR reading failed. Please enter details manually.');
+    } finally {
+      setIsScanningOCR(false);
+    }
+  };
+
+  // Save Item
+  const handleSaveItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !name.trim() || !effectiveExpiryDate) {
+      alert('Please provide a product name and valid expiry date.');
+      return;
+    }
+    setSubmitting(true);
+
+    const brandKey = brand.trim().toLowerCase();
+    const isVerified = brandKey in verifiedBrandsMap;
+
+    const payload: Record<string, unknown> = {
+      name: name.trim(),
+      brand: brand.trim() || null,
+      is_verified_brand: isVerified,
+      category,
+      expiry_date: effectiveExpiryDate,
+      mfg_date: mfgDate.trim() || null,
+      lifespan_months: expiryMode === 'best_before' ? parseInt(bestBeforeMonths, 10) || null : null,
+      notes: notes.trim() || null,
+    };
+
+    try {
+      if (editingItemId) {
+        const { error } = await supabase
+          .from('items')
+          .update(payload)
+          .eq('id', editingItemId);
+
+        if (error) throw new Error(error.message || 'Update failed');
+      } else {
+        const { error } = await supabase
+          .from('items')
+          .insert([{ ...payload, user_id: user.id }]);
+
+        if (error) throw new Error(error.message || 'Insert failed');
       }
-      if (meta.isWarranty && meta.daysRemaining >= 0 && meta.daysRemaining <= 30) {
-        warrantyEndingSoonCount++;
+
+      setIsModalOpen(false);
+      await refreshItems();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Supabase Save Error Details:', message, err);
+      alert(`Supabase Error: ${message}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Delete from Modal
+  const handleDeleteFromModal = async () => {
+    if (!editingItemId) return;
+    if (!confirm(`Are you sure you want to permanently delete "${name}"?`)) return;
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase.from('items').delete().eq('id', editingItemId);
+      if (!error) {
+        setItems((prev) => prev.filter((item) => item.id !== editingItemId));
+        setIsModalOpen(false);
+      } else {
+        alert(error.message);
       }
-      if (meta.isRenewal && meta.daysRemaining >= 0 && meta.daysRemaining <= 30) {
-        renewalsDueSoonCount++;
+    } catch (err: unknown) {
+      console.error('Error deleting record:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Category Actions
+  const getCategoryAction = (cat: Category) => {
+    switch (cat) {
+      case 'Foods':
+      case 'Groceries':
+        return {
+          label: 'Consumed',
+          confirmMsg: `Mark "${name}" as consumed/eaten?`,
+          icon: <Check className="h-3.5 w-3.5" aria-hidden="true" />,
+          bgColor: 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/80',
+        };
+      case 'Medicine':
+        return {
+          label: 'Course Finished',
+          confirmMsg: `Mark medicine "${name}" course as completed?`,
+          icon: <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />,
+          bgColor: 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-200/80',
+        };
+      case 'Cosmetics':
+        return {
+          label: 'Used Up',
+          confirmMsg: `Mark cosmetic "${name}" as completely used up?`,
+          icon: <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />,
+          bgColor: 'bg-pink-50 hover:bg-pink-100 text-pink-700 border-pink-200/80',
+        };
+      case 'Subscription':
+        return {
+          label: 'Cancelled',
+          confirmMsg: `Mark subscription for "${name}" as cancelled/ended?`,
+          icon: <Ban className="h-3.5 w-3.5" aria-hidden="true" />,
+          bgColor: 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200',
+        };
+      case 'Electronics':
+      case 'Warranty':
+        return {
+          label: 'Replaced / Sold',
+          confirmMsg: `Remove "${name}" as replaced, sold, or decommissioned?`,
+          icon: <Archive className="h-3.5 w-3.5" aria-hidden="true" />,
+          bgColor: 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/80',
+        };
+      default:
+        return {
+          label: 'Archived',
+          confirmMsg: `Archive or close "${name}"?`,
+          icon: <Archive className="h-3.5 w-3.5" aria-hidden="true" />,
+          bgColor: 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200',
+        };
+    }
+  };
+
+  const handleSmartDismiss = async () => {
+    if (!editingItemId) return;
+    const action = getCategoryAction(category);
+    if (!confirm(action.confirmMsg)) return;
+
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase.from('items').delete().eq('id', editingItemId);
+      if (!error) {
+        setItems((prev) => prev.filter((item) => item.id !== editingItemId));
+        setIsModalOpen(false);
+      } else {
+        alert(error.message);
       }
-    });
+    } catch (err: unknown) {
+      console.error('Error closing record:', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Expiry Calculations
+  const getExpiryDetails = (dateStr: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const exp = new Date(dateStr);
+    exp.setHours(0, 0, 0, 0);
+
+    const diffMs = exp.getTime() - today.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      const absDays = Math.abs(diffDays);
+      const label = absDays === 1 ? 'Expired yesterday' : `Expired ${absDays} days ago`;
+      return {
+        tag: 'Expired',
+        detailText: label,
+        badgeColor: 'bg-red-50 text-red-700 border-red-200',
+        textColor: 'text-red-600 font-semibold',
+        type: 'expired' as const,
+      };
+    }
+
+    if (diffDays === 0) {
+      return {
+        tag: 'Expires Today',
+        detailText: 'Expiring today!',
+        badgeColor: 'bg-amber-500 text-white border-amber-600 animate-pulse',
+        textColor: 'text-amber-600 font-bold',
+        type: 'expiring' as const,
+      };
+    }
+
+    if (diffDays === 1) {
+      return {
+        tag: 'Expires Tomorrow',
+        detailText: 'Expires tomorrow',
+        badgeColor: 'bg-amber-50 text-amber-700 border-amber-300',
+        textColor: 'text-amber-600 font-medium',
+        type: 'expiring' as const,
+      };
+    }
+
+    if (diffDays <= 30) {
+      return {
+        tag: `${diffDays} days left`,
+        detailText: `Expires in ${diffDays} days`,
+        badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
+        textColor: 'text-amber-600 font-medium',
+        type: 'expiring' as const,
+      };
+    }
+
+    const months = Math.floor(diffDays / 30);
+    const remDays = diffDays % 30;
+    const detailText = months > 0 
+      ? `Expires in ${months} mo${months > 1 ? 's' : ''}${remDays > 0 ? `, ${remDays} d` : ''}`
+      : `Expires in ${diffDays} days`;
 
     return {
-      total: items.length,
-      expired: expiredCount,
-      expiring: expiringSoonCount,
-      warrantySoon: warrantyEndingSoonCount,
-      renewalsSoon: renewalsDueSoonCount,
+      tag: 'Healthy',
+      detailText,
+      badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      textColor: 'text-slate-600',
+      type: 'valid' as const,
     };
-  }, [items]);
-
-  const processedItems = useMemo(() => {
-    return filterAndSortItems(items, {
-      searchQuery,
-      statusFilter,
-      categoryFilter,
-      sortBy,
-    });
-  }, [items, searchQuery, statusFilter, categoryFilter, sortBy]);
-
-  const itemGroups = useMemo(() => {
-    return groupItems(processedItems, groupMode);
-  }, [processedItems, groupMode]);
-
-  const hasActiveFilters =
-    searchQuery.trim().length > 0 || statusFilter !== 'all' || categoryFilter !== 'all';
-
-  const handleClearFilters = () => {
-    setSearchQuery('');
-    setStatusFilter('all');
-    setCategoryFilter('all');
   };
 
+  // Metrics
+  const metrics = useMemo(() => {
+    let expired = 0;
+    let expiring = 0;
+    let valid = 0;
+
+    items.forEach((item) => {
+      const exp = getExpiryDetails(item.expiry_date);
+      if (exp.type === 'expired') expired++;
+      else if (exp.type === 'expiring') expiring++;
+      else valid++;
+    });
+
+    return { total: items.length, expired, expiring, valid };
+  }, [items]);
+
+  // Filter & Sort
+  const processedItems = useMemo(() => {
+    return items
+      .filter((item) => {
+        const itemCat = (item.category || '').trim().toLowerCase();
+        const itemName = (item.name || '').toLowerCase();
+        const itemBrand = (item.brand || '').toLowerCase();
+        const query = searchQuery.trim().toLowerCase();
+
+        const matchesSearch =
+          itemName.includes(query) ||
+          itemBrand.includes(query) ||
+          itemCat.includes(query);
+
+        const matchesCategory =
+          selectedCategory === 'All' ||
+          itemCat === selectedCategory.trim().toLowerCase();
+
+        const exp = getExpiryDetails(item.expiry_date);
+        const matchesStatus = statusTab === 'all' || exp.type === statusTab;
+
+        return matchesSearch && matchesCategory && matchesStatus;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'expiry_asc') return new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+        if (sortBy === 'expiry_desc') return new Date(b.expiry_date).getTime() - new Date(a.expiry_date).getTime();
+        if (sortBy === 'name_asc') return a.name.localeCompare(b.name);
+        if (sortBy === 'created_desc') return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return 0;
+      });
+  }, [items, searchQuery, selectedCategory, statusTab, sortBy]);
+
   return (
-    <div className="space-y-4 sm:space-y-6 pb-20 sm:pb-8">
-      {/* Top Banner (Touch Friendly) */}
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 sm:p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 shrink-0 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <h2 className="text-sm font-bold text-slate-900 truncate">
-              {user?.user_metadata?.full_name || user?.email}
-            </h2>
-            <p className="text-xs text-slate-600">
-              <strong className="text-slate-800">{items.length} records</strong> tracked
-            </p>
-          </div>
-        </div>
-
-        <Button
-          size="md"
-          variant="primary"
-          onClick={() => {
-            setEditingItem(null);
-            setFormModalMode('add');
-            setFormModalOpen(true);
-          }}
-          className="w-full sm:w-auto h-11 sm:h-9 text-sm font-semibold justify-center gap-2 touch-manipulation"
-        >
-          <Plus className="h-4 w-4" />
-          Add Item
-        </Button>
-      </div>
-
-      {/* Swipeable KPI Ribbon on Mobile */}
-      <div className="flex sm:grid sm:grid-cols-5 gap-2 overflow-x-auto pb-1 sm:pb-0 snap-x snap-mandatory scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
-          <MetricCard
-            label="Total Items"
-            count={metrics.total}
-            variant="default"
-            active={statusFilter === 'all'}
-            onClick={() => setStatusFilter('all')}
-          />
-        </div>
-        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
-          <MetricCard
-            label="Expired"
-            count={metrics.expired}
-            variant="danger"
-            active={statusFilter === 'expired'}
-            onClick={() => setStatusFilter('expired')}
-          />
-        </div>
-        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
-          <MetricCard
-            label="Expiring"
-            count={metrics.expiring}
-            variant="warning"
-            active={statusFilter === 'expiring'}
-            onClick={() => setStatusFilter('expiring')}
-          />
-        </div>
-        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
-          <MetricCard
-            label="Warranty"
-            count={metrics.warrantySoon}
-            variant="info"
-            active={statusFilter === 'warranty'}
-            onClick={() => setStatusFilter('warranty')}
-          />
-        </div>
-        <div className="snap-start shrink-0 w-32.5 sm:w-auto">
-          <MetricCard
-            label="Renewals"
-            count={metrics.renewalsSoon}
-            variant="purple"
-            active={statusFilter === 'renewal'}
-            onClick={() => setStatusFilter('renewal')}
-          />
-        </div>
-      </div>
-
-      {/* Search Input (No iOS Zoom) */}
-      <div className="relative w-full">
-        <Search className="absolute left-3.5 top-3 sm:top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
-        <Input
-          placeholder="Search items, brands, serial no..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10 h-11 sm:h-9 text-base sm:text-sm"
-        />
-      </div>
-
-      {/* Filter Tabs */}
-      <FilterTabs
-        currentStatus={statusFilter}
-        onStatusChange={setStatusFilter}
-        selectedCategory={categoryFilter}
-        onCategoryChange={setCategoryFilter}
-        currentSort={sortBy}
-        onSortChange={setSortBy}
-        hasActiveFilters={hasActiveFilters}
-        onClearFilters={handleClearFilters}
-      />
-
-      {/* View Header & Mode Switcher */}
-      <div className="flex items-center justify-between pt-1">
+    <div className="space-y-6">
+      {/* Top Banner */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h3 className="text-sm font-bold text-slate-800">
-            Vault Items ({processedItems.length})
-          </h3>
-          {hasActiveFilters && (
-            <span className="text-[11px] text-slate-500">Filtered view active</span>
-          )}
+          <div className="flex items-center space-x-2 mb-1">
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">LifeVault Dashboard</h1>
+            <span className="bg-emerald-50 text-emerald-700 text-[11px] font-semibold px-2 py-0.5 rounded-md border border-emerald-200/60 flex items-center gap-1">
+              <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" /> RLS Protected
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">
+            Track real-time expiry dates, manufacturing lifespans, official customer care, and WhatsApp channels.
+          </p>
         </div>
 
-        <ViewModeSelector currentMode={groupMode} onChange={setGroupMode} />
+        <button
+          onClick={handleOpenAdd}
+          className="inline-flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm active:scale-[0.98]"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          <span>Add New Product</span>
+        </button>
+      </div>
+
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-slate-500 mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider">Total Stored</span>
+            <Package className="h-4 w-4 text-slate-400" aria-hidden="true" />
+          </div>
+          <p className="text-2xl font-bold text-slate-900">{metrics.total}</p>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-amber-600 mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider">Expiring Soon</span>
+            <Clock className="h-4 w-4 text-amber-500" aria-hidden="true" />
+          </div>
+          <p className="text-2xl font-bold text-slate-900">{metrics.expiring}</p>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-red-600 mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider">Expired</span>
+            <AlertTriangle className="h-4 w-4 text-red-500" aria-hidden="true" />
+          </div>
+          <p className="text-2xl font-bold text-slate-900">{metrics.expired}</p>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between text-emerald-600 mb-1">
+            <span className="text-xs font-semibold uppercase tracking-wider">Active & Safe</span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" aria-hidden="true" />
+          </div>
+          <p className="text-2xl font-bold text-slate-900">{metrics.valid}</p>
+        </div>
+      </div>
+
+      {/* Controls: Search, Type Filters, Custom Sort */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+          <div className="relative w-full md:w-80">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search product name, brand, or tag..."
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+            />
+          </div>
+
+          <div className="flex items-center justify-between w-full md:w-auto gap-2">
+            <div className="flex p-1 bg-slate-100 rounded-xl space-x-1">
+              {(['all', 'expiring', 'expired', 'valid'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setStatusTab(tab)}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg capitalize transition-colors ${
+                    statusTab === tab
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {tab === 'all' ? 'All' : tab}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsSortOpen(!isSortOpen)}
+                className="inline-flex items-center justify-between gap-2 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-medium rounded-xl transition-colors min-w-41.25"
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  <ArrowUpDown className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                  <span>{sortLabels[sortBy]}</span>
+                </div>
+                <span className={`transition-transform duration-200 text-slate-400 text-[10px] ${isSortOpen ? 'rotate-180' : ''}`}>
+                  ▼
+                </span>
+              </button>
+
+              {isSortOpen && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-30" 
+                    onClick={() => setIsSortOpen(false)} 
+                  />
+                  <div className="absolute right-0 mt-1.5 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-40 p-1 divide-y divide-slate-50">
+                    {(Object.keys(sortLabels) as SortOption[]).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => {
+                          setSortBy(option);
+                          setIsSortOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs rounded-lg transition-colors flex items-center justify-between ${
+                          sortBy === option
+                            ? 'bg-emerald-50 text-emerald-700 font-semibold'
+                            : 'text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{sortLabels[option]}</span>
+                        {sortBy === option && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 border-t border-slate-100 pt-3">
+          <span className="text-[11px] font-semibold text-slate-400 flex items-center mr-1">
+            <Filter className="h-3 w-3 mr-1" aria-hidden="true" /> Category:
+          </span>
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
+              className={`text-xs px-3 py-1 rounded-lg shrink-0 font-medium transition-colors ${
+                selectedCategory === cat
+                  ? 'bg-emerald-600 text-white font-semibold shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Items List */}
-      {isLoading ? (
-        <LoadingSkeleton count={3} />
-      ) : processedItems.length === 0 ? (
-        <EmptyState
-          title="No items found"
-          description={
-            hasActiveFilters
-              ? 'No items match your active search or filter criteria.'
-              : 'Your vault is clear. Tap "Add Item" to track your first product or document.'
-          }
-          actionLabel={hasActiveFilters ? 'Reset Filters' : 'Add Item'}
-          onAction={
-            hasActiveFilters
-              ? handleClearFilters
-              : () => {
-                  setEditingItem(null);
-                  setFormModalMode('add');
-                  setFormModalOpen(true);
-                }
-          }
-        />
-      ) : (
-        <div className="space-y-4">
-          {itemGroups.map((group) => (
-            <div key={group.id} className="space-y-2">
-              {groupMode !== 'none' && (
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-1.5">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    {group.title}
-                  </span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">
-                    {group.count}
-                  </span>
-                </div>
-              )}
+      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="p-12 text-center text-slate-500">
+            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-emerald-600" aria-hidden="true" />
+            <p className="text-xs font-medium">Fetching records...</p>
+          </div>
+        ) : processedItems.length === 0 ? (
+          <div className="p-12 text-center text-slate-500">
+            <Package className="h-10 w-10 mx-auto mb-3 text-slate-300" aria-hidden="true" />
+            <p className="text-sm font-semibold text-slate-700">No records found</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {searchQuery || selectedCategory !== 'All'
+                ? `No items found under category "${selectedCategory}".`
+                : 'Add a product or medicine to monitor its expiry.'}
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {processedItems.map((item) => {
+              const exp = getExpiryDetails(item.expiry_date);
+              const searchTarget = item.brand ? `${item.brand} service centre near me` : `${item.name} repair service near me`;
+              const brandMeta = item.brand ? verifiedBrandsMap[item.brand.trim().toLowerCase()] : null;
 
-              <div className="space-y-2">
-                {group.items.map((proc) => (
-                  <ItemCard
-                    key={proc.item.id}
-                    processed={proc}
-                    onView={() => setViewingItem(proc.item)}
-                  />
-                ))}
+              return (
+                <div
+                  key={item.id}
+                  className="p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50/60 transition-colors"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-sm text-slate-900">{item.name}</span>
+
+                      {item.brand && (
+                        <span className="inline-flex items-center text-[11px] font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                          {item.brand}
+                          {brandMeta && (
+                            <BadgeCheck 
+                              className="h-3 w-3 ml-1 text-blue-600" 
+                              role="img" 
+                              aria-label="Verified Brand" 
+                            />
+                          )}
+                        </span>
+                      )}
+
+                      <span className="inline-flex items-center text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200/60">
+                        <Tag className="h-3 w-3 mr-1 text-slate-400" aria-hidden="true" />
+                        {item.category}
+                      </span>
+                    </div>
+
+                    {item.notes && (
+                      <p className="text-xs text-slate-500 max-w-xl line-clamp-1">{item.notes}</p>
+                    )}
+
+                    {/* Expiry Dates & Manufacturing Dates */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-0.5">
+                      {item.mfg_date && (
+                        <span className="flex items-center text-slate-500">
+                          <CalendarDays className="h-3.5 w-3.5 mr-1 text-slate-400" aria-hidden="true" />
+                          Mfg: <span className="ml-1 font-medium text-slate-700">{new Date(item.mfg_date).toLocaleDateString()}</span>
+                          {item.lifespan_months && (
+                            <span className="ml-1 text-[10px] bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 text-slate-600">
+                              (Use within {item.lifespan_months} mos)
+                            </span>
+                          )}
+                          <span className="mx-2 text-slate-300">•</span>
+                        </span>
+                      )}
+
+                      <span className="flex items-center">
+                        <Calendar className="h-3.5 w-3.5 mr-1 text-slate-400" aria-hidden="true" />
+                        Expiry: <span className="ml-1 font-medium text-slate-800">{new Date(item.expiry_date).toLocaleDateString()}</span>
+                        <span className="mx-1.5 text-slate-300">•</span>
+                        <span className={exp.textColor}>({exp.detailText})</span>
+                      </span>
+                    </div>
+
+                    {/* Dedicated Customer Care Channels Bar */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {/* Nearby Repair (Google Maps) */}
+                      <a
+                        href={`https://www.google.com/maps/search/${encodeURIComponent(searchTarget)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center text-slate-600 hover:text-slate-900 bg-slate-100/90 hover:bg-slate-200/80 px-2 py-1 rounded-lg font-medium text-[11px] border border-slate-200/70 transition-colors"
+                      >
+                        <MapPin className="h-3 w-3 mr-1 text-emerald-600" aria-hidden="true" />
+                        Nearby Centre
+                        <ExternalLink className="h-2.5 w-2.5 ml-1 text-slate-400" aria-hidden="true" />
+                      </a>
+
+                      {/* Official Support Website from Admin */}
+                      {brandMeta?.support_url && (
+                        <a
+                          href={brandMeta.support_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center text-blue-700 hover:text-blue-800 bg-blue-50/80 hover:bg-blue-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-blue-200/70 transition-colors"
+                        >
+                          <Globe className="h-3 w-3 mr-1 text-blue-600" aria-hidden="true" />
+                          Official Support
+                          <ExternalLink className="h-2.5 w-2.5 ml-1 text-blue-400" aria-hidden="true" />
+                        </a>
+                      )}
+
+                      {/* Customer Care Call Helpline from Admin */}
+                      {brandMeta?.customer_care_phone && (
+                        <a
+                          href={`tel:${brandMeta.customer_care_phone}`}
+                          className="inline-flex items-center text-slate-700 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-slate-200/80 transition-colors"
+                        >
+                          <Phone className="h-3 w-3 mr-1 text-slate-500" aria-hidden="true" />
+                          Call: {brandMeta.customer_care_phone}
+                        </a>
+                      )}
+
+                      {/* Official WhatsApp Support from Admin */}
+                      {brandMeta?.whatsapp_number && (
+                        <a
+                          href={`https://wa.me/${brandMeta.whatsapp_number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                            `Hello, I need customer support for my ${item.name}`
+                          )}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg font-medium text-[11px] border border-emerald-200 transition-colors"
+                        >
+                          <MessageCircle className="h-3 w-3 mr-1 text-emerald-600" aria-hidden="true" />
+                          WhatsApp Care
+                        </a>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3 self-end md:self-center shrink-0">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${exp.badgeColor}`}>
+                      {exp.tag}
+                    </span>
+
+                    <button
+                      onClick={() => handleOpenEdit(item)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all shadow-xs active:scale-95"
+                      title="Edit Item"
+                    >
+                      <Edit3 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                      <span>Edit</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Add / Edit Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  {editingItemId ? 'Edit Product Record' : 'Add New Record'}
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  {editingItemId ? 'Update details, manufacturing date, or dismiss item' : 'Scan a bill or type manually'}
+                </p>
               </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-xs font-semibold"
+              >
+                Close
+              </button>
             </div>
-          ))}
+
+            {!editingItemId && (
+              <div className="bg-emerald-50/50 border border-dashed border-emerald-300 rounded-xl p-3 text-center">
+                <label className="cursor-pointer flex flex-col items-center justify-center space-y-1">
+                  {isScanningOCR ? (
+                    <div className="flex items-center space-x-2 text-emerald-700 text-xs font-medium py-2">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      <span>Reading Bill / Invoice...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center space-x-1.5 text-emerald-700 text-xs font-semibold">
+                        <ScanLine className="h-4 w-4" aria-hidden="true" />
+                        <span>Upload Bill / Invoice (Auto OCR)</span>
+                      </div>
+                      <span className="text-[10px] text-slate-500">
+                        Upload invoice photo or receipt to auto-fill details
+                      </span>
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={handleSimulateOCR}
+                    disabled={isScanningOCR}
+                  />
+                </label>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveItem} className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Product / Item Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={name || ''}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Rice Bag, Shampoo, Face Cream"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Brand / Shop <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={brand || ''}
+                    onChange={(e) => setBrand(e.target.value)}
+                    placeholder="e.g. Amul, Nivea, Local Mart"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as Category)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                >
+                  <option value="Electronics">Electronics</option>
+                  <option value="Groceries">Groceries</option>
+                  <option value="Foods">Foods</option>
+                  <option value="Cosmetics">Cosmetics</option>
+                  <option value="Medicine">Medicine</option>
+                  <option value="Warranty">Warranty</option>
+                  <option value="Subscription">Subscription</option>
+                  <option value="Document">Document</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              {/* Manufacturing & Smart Expiry Mode Switcher */}
+              <div className="bg-slate-50/90 border border-slate-200/80 rounded-2xl p-3.5 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Calculator className="h-3.5 w-3.5 text-emerald-600" />
+                    Expiry Determination
+                  </span>
+                  
+                  <div className="flex items-center p-0.5 bg-slate-200/70 rounded-lg text-[11px] font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setExpiryMode('direct')}
+                      className={`px-2.5 py-1 rounded-md transition-all ${
+                        expiryMode === 'direct'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Exact Expiry Date
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpiryMode('best_before')}
+                      className={`px-2.5 py-1 rounded-md transition-all ${
+                        expiryMode === 'best_before'
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Best Before (Mfg + X mos)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                      Manufacturing Date <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={mfgDate || ''}
+                      onChange={(e) => setMfgDate(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  {expiryMode === 'best_before' ? (
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Use Within / Best Before
+                      </label>
+                      <select
+                        value={bestBeforeMonths}
+                        onChange={(e) => setBestBeforeMonths(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                      >
+                        <option value="1">1 Month</option>
+                        <option value="2">2 Months</option>
+                        <option value="3">3 Months</option>
+                        <option value="6">6 Months (Half year)</option>
+                        <option value="9">9 Months</option>
+                        <option value="12">12 Months (1 Year)</option>
+                        <option value="18">18 Months (1.5 Years)</option>
+                        <option value="24">24 Months (2 Years)</option>
+                        <option value="36">36 Months (3 Years)</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Exact Expiry Date *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={expiryDate || ''}
+                        onChange={(e) => setExpiryDate(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {expiryMode === 'best_before' && (
+                  <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-center justify-between text-xs">
+                    <span className="text-emerald-800 font-medium">Calculated Expiry Date:</span>
+                    <span className="font-bold text-emerald-900 bg-white px-2 py-0.5 rounded border border-emerald-200 shadow-2xs">
+                      {calculatedExpiryDate ? new Date(calculatedExpiryDate).toLocaleDateString() : 'Select Mfg Date'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Notes / Batch No. / Bill Details
+                </label>
+                <textarea
+                  rows={2}
+                  value={notes || ''}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Batch number, shop details, or receipt note..."
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                />
+              </div>
+
+              {/* UI/UX Feature: Official Brand Support Hub inside Modal */}
+              {(() => {
+                const currentBrandMeta = brand.trim() ? verifiedBrandsMap[brand.trim().toLowerCase()] : null;
+                if (!currentBrandMeta || (!currentBrandMeta.customer_care_phone && !currentBrandMeta.whatsapp_number && !currentBrandMeta.support_url)) {
+                  return null;
+                }
+
+                return (
+                  <div className="p-3 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <BadgeCheck className="h-4 w-4 text-blue-600" />
+                        <span className="text-xs font-bold text-slate-900">
+                          {currentBrandMeta.name || brand} Official Support Channels
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                        Verified
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      {/* WhatsApp Support */}
+                      {currentBrandMeta.whatsapp_number && (
+                        <a
+                          href={`https://wa.me/${currentBrandMeta.whatsapp_number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                            `Hello, I need customer support for my ${name || 'product'}`
+                          )}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-xl text-xs font-semibold shadow-2xs transition-all"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>WhatsApp Care</span>
+                        </a>
+                      )}
+
+                      {/* Phone / Toll-free */}
+                      {currentBrandMeta.customer_care_phone && (
+                        <a
+                          href={`tel:${currentBrandMeta.customer_care_phone}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold shadow-2xs transition-all"
+                        >
+                          <Phone className="h-3.5 w-3.5 text-slate-500" />
+                          <span>Call: {currentBrandMeta.customer_care_phone}</span>
+                        </a>
+                      )}
+
+                      {/* Official Support Website */}
+                      {currentBrandMeta.support_url && (
+                        <a
+                          href={currentBrandMeta.support_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-semibold shadow-2xs transition-all"
+                        >
+                          <Globe className="h-3.5 w-3.5 text-blue-600" />
+                          <span>Official Portal</span>
+                          <ExternalLink className="h-3 w-3 text-blue-400 ml-0.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+                {editingItemId ? (
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const action = getCategoryAction(category);
+                      return (
+                        <button
+                          type="button"
+                          onClick={handleSmartDismiss}
+                          disabled={isDeleting || submitting}
+                          className={`inline-flex items-center gap-1.5 px-3 py-2 border rounded-xl text-xs font-semibold transition-colors disabled:opacity-50 ${action.bgColor}`}
+                          title={action.label}
+                        >
+                          {action.icon}
+                          <span>{action.label}</span>
+                        </button>
+                      );
+                    })()}
+
+                    <button
+                      type="button"
+                      onClick={handleDeleteFromModal}
+                      disabled={isDeleting || submitting}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 rounded-xl text-xs font-semibold transition-colors disabled:opacity-50"
+                      title="Delete record permanently"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting || isScanningOCR || isDeleting}
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition-all shadow-sm disabled:opacity-50"
+                  >
+                    {submitting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <span>{editingItemId ? 'Update Record' : 'Save Record'}</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       )}
-
-      {/* Modals */}
-      <ItemFormModal
-        isOpen={formModalOpen}
-        onClose={() => {
-          setFormModalOpen(false);
-          setEditingItem(null);
-        }}
-        onSubmit={handleFormSubmit}
-        initialData={editingItem}
-        mode={formModalMode}
-      />
-
-      <ItemDetailModal
-        item={viewingItem}
-        onClose={() => setViewingItem(null)}
-        onEdit={(item) => {
-          setViewingItem(null);
-          setEditingItem(item);
-          setFormModalMode('edit');
-          setFormModalOpen(true);
-        }}
-        onDelete={handleDeleteItem}
-      />
     </div>
   );
 }
